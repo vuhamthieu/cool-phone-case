@@ -1,0 +1,5 @@
+.pio
+.vscode
+/.ext_ide/
+.data
+**/.DS_Store
