@@ -1,0 +1,19 @@
+name: MochiCase
+options:
+  bundleIdPrefix: com.vuhamthieu
+targets:
+  MochiCase:
+    type: application
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: ios
+    info:
+      properties:
+        NSCameraUsageDescription: "Streaming retro video to OLED"
+        NSBluetoothAlwaysUsageDescription: "Sending commands to ESP32"
+    settings:
+      base:
+        CODE_SIGNING_ALLOWED: "No"
+        CODE_SIGNING_REQUIRED: "No"
+        CODE_SIGN_IDENTITY: ""
