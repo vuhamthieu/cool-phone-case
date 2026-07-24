@@ -23,3 +23,6 @@ void renderMochi(MochiEmotion emotion, uint8_t frameIndex);
 
 // Render 1024-byte (128x64) camera frame buffer with optional filter
 void renderCameraStream(const uint8_t* frameBuffer, CameraFilter filter);
+
+// Render the blinking low battery override screen
+void drawLowBatteryScreen(bool blinkState);

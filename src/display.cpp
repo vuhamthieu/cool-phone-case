@@ -176,3 +176,22 @@ void renderCameraStream(const uint8_t* frameBuffer, CameraFilter filter) {
         u8g2.setDrawColor(1); // Restore normal write mode
     }
 }
+
+void drawLowBatteryScreen(bool blinkState) {
+    if (blinkState) {
+        // Draw empty battery icon
+        // Outer box (centered on screen)
+        u8g2.drawFrame(49, 14, 30, 16);
+        // Battery nipple
+        u8g2.drawBox(79, 19, 3, 6);
+        
+        // Small warning exclamation mark inside battery
+        u8g2.drawVLine(64, 18, 5);
+        u8g2.drawPixel(64, 25);
+
+        // Warning text
+        u8g2.setFont(u8g2_font_6x10_tf);
+        drawTextCentered(46, "LOW BATTERY");
+        drawTextCentered(58, "PLEASE CHARGE");
+    }
+}
