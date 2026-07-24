@@ -53,3 +53,16 @@ extern CameraFilter currentCameraFilter;
 extern volatile bool modeChangedFlag;
 extern volatile bool touchTriggeredFlag;
 extern bool timeSynced;
+
+// Battery & Multitasking States
+extern volatile bool isLowBattery;
+extern SemaphoreHandle_t displayMutex;
+
+// Touch Gesture States
+extern bool mochiGestureActive;
+extern MochiEmotion mochiActiveGestureEmotion;
+extern unsigned long mochiGestureEndTime;
+
+// Camera Frame Cache
+extern uint8_t cachedCameraFrame[1024];
+extern bool hasCachedFrame;

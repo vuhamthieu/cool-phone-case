@@ -1,11 +1,13 @@
 // src/main.cpp
 #include <Arduino.h>
+#include <ArduinoOTA.h>
 #include "config.h"
 #include "pins.h"
 #include "display.h"
 #include "ble.h"
 #include "wifi_stream.h"
 #include "mochi_faces.h"
+#include "touch.h"
 
 // Global state definitions
 SystemMode currentMode = MODE_MOCHI;
@@ -17,27 +19,17 @@ volatile bool modeChangedFlag = false;
 volatile bool touchTriggeredFlag = false;
 bool timeSynced = false;
 
-// Variables for Touch Debouncing
-static bool lastTouchState = LOW;
-static unsigned long lastDebounceTime = 0;
-static const unsigned long DEBOUNCE_DELAY_MS = 30; 
+// Battery & Multitasking States
+volatile bool isLowBattery = false;
+SemaphoreHandle_t displayMutex = NULL;
 
-// Variables for Mochi animation control
-static unsigned long lastMochiFrameTime = 0;
-static uint8_t mochiFrameIndex = 0;
+// Camera Frame Cache
+uint8_t cachedCameraFrame[1024];
+bool hasCachedFrame = false;
 
-// Gesture recognition variables for Mochi Mode
-static int mochiTapCount = 0;
-static unsigned long mochiLastTapTime = 0;
-static bool mochiTouchIsHeld = false;
-static unsigned long mochiTouchStartTime = 0;
-static bool mochiGestureActive = false;
-static MochiEmotion mochiActiveGestureEmotion = MOCHI_DEFAULT;
-static unsigned long mochiGestureEndTime = 0;
-
-// Frame buffer cache to allow instant rendering when switching filters
-static uint8_t cachedCameraFrame[1024];
-static bool hasCachedFrame = false;
+// Task functions
+void Task1_UDP_Display(void* pvParameters);
+void Task2_General(void* pvParameters);
 
 void setup() {
     Serial.begin(115200);
@@ -45,211 +37,249 @@ void setup() {
     Serial.println("--- Starting Mochi Second Screen Phone Case ---");
     
     // Configure inputs
-    pinMode(PIN_TOUCH, INPUT);
+    pinMode(PIN_BAT_ADC, ANALOG);
+    touchInit();
+    
+    // Create Mutex for shared display access
+    displayMutex = xSemaphoreCreateMutex();
+    if (displayMutex == NULL) {
+        Serial.println("Error creating display mutex!");
+    }
     
     // Initialize components
     displayInit();
     bleInit();
+    wifiStreamInit(); // Starts Wi-Fi AP, UDP Server, and ArduinoOTA
     
     // Show splash screen on boot
-    displayClear();
-    drawTextCentered(20, "MOCHI CASE");
-    drawTextCentered(35, "V1.0.0");
-    drawTextCentered(50, "Waiting for BLE...");
-    displayUpdate();
+    if (xSemaphoreTake(displayMutex, portMAX_DELAY) == pdTRUE) {
+        displayClear();
+        drawTextCentered(20, "MOCHI CASE");
+        drawTextCentered(35, "V1.0.0");
+        drawTextCentered(50, "Waiting for BLE...");
+        displayUpdate();
+        xSemaphoreGive(displayMutex);
+    }
     
     delay(1500);
-    displayClear();
-}
+    
+    if (xSemaphoreTake(displayMutex, portMAX_DELAY) == pdTRUE) {
+        displayClear();
+        displayUpdate();
+        xSemaphoreGive(displayMutex);
+    }
 
-void handleTouchInput() {
-    bool currentTouchState = digitalRead(PIN_TOUCH);
-    
-    // Check if the Touch state changed
-    if (currentTouchState != lastTouchState) {
-        lastDebounceTime = millis();
+    // Perform initial ADC Battery check
+    uint32_t adcSum = 0;
+    for (int i = 0; i < 50; i++) {
+        adcSum += analogReadMilliVolts(PIN_BAT_ADC);
+        delay(1);
     }
+    float avgPinMilliVolts = (float)adcSum / 50.0f;
+    float batteryVoltage = (avgPinMilliVolts * 2.0f) / 1000.0f;
+    int pct = (int)round((batteryVoltage - 3.2f) / (4.2f - 3.2f) * 100.0f);
+    if (pct < 0) pct = 0;
+    if (pct > 100) pct = 100;
     
-    if ((millis() - lastDebounceTime) > DEBOUNCE_DELAY_MS) {
-        // Continuous check for hold/rub gesture in Mochi mode
-        if (currentMode == MODE_MOCHI && currentTouchState == HIGH) {
-            unsigned long heldTime = millis() - mochiTouchStartTime;
-            if (heldTime > 15000) { // Held/rubbed for over 15s -> Angry face
-                mochiTouchIsHeld = true;
-                mochiGestureActive = true;
-                if (mochiActiveGestureEmotion != MOCHI_ANGRY) {
-                    mochiActiveGestureEmotion = MOCHI_ANGRY;
-                    mochiFrameIndex = 0;
-                    lastMochiFrameTime = millis();
-                    Serial.println("Gesture: Constant rubbing > 15s -> Angry face");
-                }
-                mochiGestureEndTime = 0; // Remain angry as long as held
-            } else if (heldTime > 1000 && !mochiTouchIsHeld) { // Held for over 1s -> Happy face
-                mochiTouchIsHeld = true;
-                mochiGestureActive = true;
-                mochiActiveGestureEmotion = MOCHI_HAPPY;
-                mochiGestureEndTime = 0; // Remain happy as long as held
-                mochiFrameIndex = 0;
-                lastMochiFrameTime = millis();
-                Serial.println("Gesture: Hold/Rub detected -> Happy face");
-            }
-        }
+    bleUpdateBattery(pct);
+    if (batteryVoltage >= 4.15f) {
+        isLowBattery = false;
+    } else if (pct <= 20) {
+        isLowBattery = true;
+    } else {
+        isLowBattery = false;
+    }
+    Serial.printf("Initial Battery: %.2fV (%d%%), LowBattery=%s\n", batteryVoltage, pct, isLowBattery ? "TRUE" : "FALSE");
+    
+    // Create FreeRTOS Tasks pinned to Core 0 (since ESP32-C3 is single-core)
+    xTaskCreatePinnedToCore(
+        Task1_UDP_Display,
+        "UDP_Display_Task",
+        4096,
+        NULL,
+        2, // Higher priority for smooth frame processing
+        NULL,
+        0
+    );
 
-        // Edge detection settled
-        if (currentTouchState == HIGH && !touchTriggeredFlag) {
-            touchTriggeredFlag = true;
-            
-            // Cycle sub-states based on current mode
-            switch (currentMode) {
-                case MODE_CLOCK:
-                    currentClockStyle = (ClockStyle)((currentClockStyle + 1) % CLOCK_STYLE_MAX);
-                    Serial.printf("Clock Style changed to: %d\n", currentClockStyle);
-                    break;
-                case MODE_MOCHI:
-                    mochiTouchStartTime = millis();
-                    mochiTouchIsHeld = false;
-                    break;
-                case MODE_CAMERA:
-                    currentCameraFilter = (CameraFilter)((currentCameraFilter + 1) % CAMERA_FILTER_MAX);
-                    Serial.printf("Camera Filter changed to: %d\n", currentCameraFilter);
-                    
-                    // Force a re-render of cached frame with new filter
-                    if (hasCachedFrame) {
-                        displayClear();
-                        renderCameraStream(cachedCameraFrame, currentCameraFilter);
-                        displayUpdate();
-                    }
-                    break;
-            }
-        } else if (currentTouchState == LOW && touchTriggeredFlag) {
-            // Touch released
-            touchTriggeredFlag = false;
-            
-            if (currentMode == MODE_MOCHI) {
-                if (mochiTouchIsHeld) {
-                    // Just released a hold/rub gesture
-                    if (mochiActiveGestureEmotion == MOCHI_ANGRY) {
-                        mochiGestureEndTime = millis() + 2000; // Stay angry for 2s post-release
-                    } else {
-                        mochiGestureEndTime = millis() + 800; // Stay happy for 800ms post-release
-                    }
-                    mochiTouchIsHeld = false;
-                } else {
-                    // Short tap detected
-                    mochiTapCount++;
-                    mochiLastTapTime = millis();
-                    Serial.printf("Mochi tap count: %d\n", mochiTapCount);
-                }
-            }
-        }
-    }
-    
-    // Check if the tap sequence has completed (300ms of inactivity after tap)
-    if (currentMode == MODE_MOCHI && mochiTapCount > 0 && currentTouchState == LOW) {
-        if (millis() - mochiLastTapTime > 450) {
-            if (mochiTapCount == 1) {
-                // 1 Tap -> What face
-                mochiGestureActive = true;
-                mochiActiveGestureEmotion = MOCHI_WHAT;
-                mochiGestureEndTime = millis() + 2000;
-                mochiFrameIndex = 0;
-                lastMochiFrameTime = millis();
-                Serial.println("Gesture: 1 Tap -> What face");
-            } else if (mochiTapCount >= 2) {
-                // 2+ Taps -> Judging face
-                mochiGestureActive = true;
-                mochiActiveGestureEmotion = MOCHI_JUDGE;
-                mochiGestureEndTime = millis() + 2500;
-                mochiFrameIndex = 0;
-                lastMochiFrameTime = millis();
-                Serial.println("Gesture: 2 Taps -> Judging face");
-            }
-            mochiTapCount = 0;
-        }
-    }
-    
-    lastTouchState = currentTouchState;
+    xTaskCreatePinnedToCore(
+        Task2_General,
+        "General_Task",
+        4096,
+        NULL,
+        1, // Lower priority
+        NULL,
+        0
+    );
 }
 
 void loop() {
-    // 1. Process Touch Sensor Inputs
-    handleTouchInput();
-    
-    // 2. Handle Mode Transitions triggered by BLE write characteristic
-    if (modeChangedFlag) {
-        modeChangedFlag = false;
-        
-        // Mode transition side effects
-        if (currentMode == MODE_CAMERA) {
-            // Turning on Camera mode -> boot Wi-Fi SoftAP and UDP
-            wifiStreamStart();
-        } else {
-            // Leaving Camera mode -> shutdown Wi-Fi to save battery
-            wifiStreamStop();
-            hasCachedFrame = false;
-        }
-        
-        displayClear();
-    }
-    
-    // 3. Render current active Mode
-    switch (currentMode) {
-        case MODE_CLOCK:
-            displayClear();
-            renderClock(currentClockStyle);
-            displayUpdate();
-            delay(100); // 10Hz UI refresh for clock is plenty
-            break;
-            
-        case MODE_MOCHI: {
-            // Apply gesture animation overrides if active
-            if (mochiGestureActive) {
-                if (mochiGestureEndTime > 0 && millis() > mochiGestureEndTime) {
-                    mochiGestureActive = false;
-                    currentMochiEmotion = MOCHI_DEFAULT;
-                    mochiFrameIndex = 0;
-                    lastMochiFrameTime = millis();
-                } else {
-                    currentMochiEmotion = mochiActiveGestureEmotion;
-                }
-            } else {
-                currentMochiEmotion = MOCHI_DEFAULT;
-            }
+    // The standard loop task is suspended to let our FreeRTOS tasks run
+    vTaskDelay(portMAX_DELAY);
+}
 
-            unsigned long now = millis();
-            uint16_t delayMs = mochiAnimations[currentMochiEmotion].frameDelayMs;
-            
-            if (now - lastMochiFrameTime >= delayMs) {
-                lastMochiFrameTime = now;
-                mochiFrameIndex = (mochiFrameIndex + 1) % mochiAnimations[currentMochiEmotion].frameCount;
-            }
-            
-            displayClear();
-            renderMochi(currentMochiEmotion, mochiFrameIndex);
-            displayUpdate();
-            delay(30); // 30Hz frame render rate
-            break;
-        }
-            
-        case MODE_CAMERA: {
+// Task 1: Dedicated to the UDP Receiver loop and rendering video frames to the OLED display
+void Task1_UDP_Display(void* pvParameters) {
+    (void)pvParameters;
+    
+    for (;;) {
+        if (currentMode == MODE_CAMERA && !isLowBattery) {
             const uint8_t* newFrame = wifiStreamGetLatestFrame();
             if (newFrame != nullptr) {
                 // Cache frame in case filter changes while stream is idle
                 memcpy(cachedCameraFrame, newFrame, 1024);
                 hasCachedFrame = true;
                 
-                displayClear();
-                renderCameraStream(newFrame, currentCameraFilter);
-                displayUpdate();
+                if (xSemaphoreTake(displayMutex, portMAX_DELAY) == pdTRUE) {
+                    displayClear();
+                    renderCameraStream(newFrame, currentCameraFilter);
+                    displayUpdate();
+                    xSemaphoreGive(displayMutex);
+                }
             } else if (!hasCachedFrame) {
                 // Display waiting screen if no frames received yet
-                displayClear();
-                renderCameraStream(nullptr, currentCameraFilter);
-                displayUpdate();
+                if (xSemaphoreTake(displayMutex, portMAX_DELAY) == pdTRUE) {
+                    displayClear();
+                    renderCameraStream(nullptr, currentCameraFilter);
+                    displayUpdate();
+                    xSemaphoreGive(displayMutex);
+                }
             }
-            // Yield to background tasks/Wi-Fi stack
-            delay(5);
-            break;
+            vTaskDelay(pdMS_TO_TICKS(5)); // Prevent CPU starvation
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(100)); // Idle/yield when not in camera mode or if battery is low
+        }
+    }
+}
+
+// Task 2: Handles the general loop (ArduinoOTA handle(), BLE Events, ADC battery polling, and touch sensor status checks)
+void Task2_General(void* pvParameters) {
+    (void)pvParameters;
+    
+    unsigned long lastBatteryCheck = 0;
+    unsigned long lastBlinkToggle = 0;
+    bool blinkState = false;
+    
+    // Animation timing for Mochi
+    unsigned long lastMochiFrameTime = 0;
+    uint8_t mochiFrameIndex = 0;
+
+    for (;;) {
+        // 1. Handle OTA updates
+        ArduinoOTA.handle();
+        
+        // 2. Poll Capacitive Touch Sensor status checks
+        touchProcess();
+        
+        // 3. Battery Polling every 60 seconds (non-blocking)
+        unsigned long now = millis();
+        if (now - lastBatteryCheck >= 60000 || lastBatteryCheck == 0) {
+            lastBatteryCheck = now;
+            
+            // Read 50 ADC samples in quick succession
+            uint32_t adcSum = 0;
+            for (int i = 0; i < 50; i++) {
+                adcSum += analogReadMilliVolts(PIN_BAT_ADC);
+                delay(1);
+            }
+            float avgPinMilliVolts = (float)adcSum / 50.0f;
+            float batteryVoltage = (avgPinMilliVolts * 2.0f) / 1000.0f;
+            
+            // Map actual voltage (from 3.2V to 4.2V) to percentage (0% - 100%)
+            int pct = (int)round((batteryVoltage - 3.2f) / (4.2f - 3.2f) * 100.0f);
+            if (pct < 0) pct = 0;
+            if (pct > 100) pct = 100;
+            
+            // Update this value to the BLE Battery Characteristic
+            bleUpdateBattery(pct);
+            
+            // Update low battery flag status
+            if (batteryVoltage >= 4.15f) {
+                isLowBattery = false;
+            } else if (pct <= 20) {
+                isLowBattery = true;
+            } else {
+                isLowBattery = false;
+            }
+            
+            Serial.printf("Battery Polling: %.2fV (%d%%), LowBattery=%s\n", batteryVoltage, pct, isLowBattery ? "TRUE" : "FALSE");
+        }
+        
+        // 4. Handle Mode Transitions triggered by BLE write characteristic
+        if (modeChangedFlag) {
+            modeChangedFlag = false;
+            if (xSemaphoreTake(displayMutex, portMAX_DELAY) == pdTRUE) {
+                displayClear();
+                displayUpdate();
+                xSemaphoreGive(displayMutex);
+            }
+        }
+        
+        // 5. Render current active Mode
+        if (isLowBattery) {
+            if (now - lastBlinkToggle >= 500) {
+                blinkState = !blinkState;
+                lastBlinkToggle = now;
+            }
+            
+            // Priority Alert Override: immediately draw blinking empty battery
+            if (xSemaphoreTake(displayMutex, portMAX_DELAY) == pdTRUE) {
+                displayClear();
+                drawLowBatteryScreen(blinkState);
+                displayUpdate();
+                xSemaphoreGive(displayMutex);
+            }
+            vTaskDelay(pdMS_TO_TICKS(100)); // Refresh warning screen at 10Hz
+        } else {
+            switch (currentMode) {
+                case MODE_CLOCK:
+                    if (xSemaphoreTake(displayMutex, portMAX_DELAY) == pdTRUE) {
+                        displayClear();
+                        renderClock(currentClockStyle);
+                        displayUpdate();
+                        xSemaphoreGive(displayMutex);
+                    }
+                    vTaskDelay(pdMS_TO_TICKS(100)); // 10Hz UI refresh for clock is plenty
+                    break;
+                    
+                case MODE_MOCHI: {
+                    // Apply gesture animation overrides if active
+                    if (mochiGestureActive) {
+                        if (mochiGestureEndTime > 0 && millis() > mochiGestureEndTime) {
+                            mochiGestureActive = false;
+                            currentMochiEmotion = MOCHI_DEFAULT;
+                            mochiFrameIndex = 0;
+                            lastMochiFrameTime = millis();
+                        } else {
+                            currentMochiEmotion = mochiActiveGestureEmotion;
+                        }
+                    } else {
+                        currentMochiEmotion = MOCHI_DEFAULT;
+                    }
+
+                    unsigned long frameNow = millis();
+                    uint16_t delayMs = mochiAnimations[currentMochiEmotion].frameDelayMs;
+                    
+                    if (frameNow - lastMochiFrameTime >= delayMs) {
+                        lastMochiFrameTime = frameNow;
+                        mochiFrameIndex = (mochiFrameIndex + 1) % mochiAnimations[currentMochiEmotion].frameCount;
+                    }
+                    
+                    if (xSemaphoreTake(displayMutex, portMAX_DELAY) == pdTRUE) {
+                        displayClear();
+                        renderMochi(currentMochiEmotion, mochiFrameIndex);
+                        displayUpdate();
+                        xSemaphoreGive(displayMutex);
+                    }
+                    vTaskDelay(pdMS_TO_TICKS(30)); // 30Hz frame render rate
+                    break;
+                }
+                    
+                case MODE_CAMERA:
+                    // Task 1 handles camera rendering, so Task 2 yields
+                    vTaskDelay(pdMS_TO_TICKS(50));
+                    break;
+            }
         }
     }
 }
