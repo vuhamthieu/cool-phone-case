@@ -210,11 +210,11 @@ struct ContentView: View {
                                     .padding(.top, 4)
                                 
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Label("Idle: Default Face", systemName: "dot.circle").foregroundColor(.white)
-                                    Label("1 Tap: What Face (2s)", systemName: "dot.circle").foregroundColor(.white)
-                                    Label("2 Taps: Judging Face (2.5s)", systemName: "dot.circle").foregroundColor(.white)
-                                    Label("Rub/Hold: Happy Face", systemName: "dot.circle").foregroundColor(.white)
-                                    Label("Rub > 15s: Angry Face", systemName: "dot.circle").foregroundColor(.white)
+                                    Label("Idle: Default Face", systemImage: "dot.circle").foregroundColor(.white)
+                                    Label("1 Tap: What Face (2s)", systemImage: "dot.circle").foregroundColor(.white)
+                                    Label("2 Taps: Judging Face (2.5s)", systemImage: "dot.circle").foregroundColor(.white)
+                                    Label("Rub/Hold: Happy Face", systemImage: "dot.circle").foregroundColor(.white)
+                                    Label("Rub > 15s: Angry Face", systemImage: "dot.circle").foregroundColor(.white)
                                 }
                                 .font(.system(size: 12, design: .monospaced))
                                 .padding(.top, 4)
