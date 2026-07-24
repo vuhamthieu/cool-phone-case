@@ -61,6 +61,8 @@ class TimeCallback: public NimBLECharacteristicCallbacks {
     }
 };
 
+static NimBLECharacteristic* pBatteryLevelChar = nullptr;
+
 void bleInit() {
     NimBLEDevice::init("Mochi_Case");
     
@@ -85,15 +87,38 @@ void bleInit() {
     
     pService->start();
     
+    // Standard GATT Battery Service (0x180F) & Battery Level Characteristic (0x2A19)
+    NimBLEService *pBatteryService = pServer->createService(NimBLEUUID((uint16_t)0x180F));
+    pBatteryLevelChar = pBatteryService->createCharacteristic(
+        NimBLEUUID((uint16_t)0x2A19),
+        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
+    );
+    uint8_t initialBat = 100;
+    pBatteryLevelChar->setValue(&initialBat, 1);
+    pBatteryService->start();
+    
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(CONTROL_SERVICE_UUID);
+    pAdvertising->addServiceUUID(NimBLEUUID((uint16_t)0x180F));
+    
     // Help iOS discover service quickly
     pAdvertising->setScanResponse(true);
     pAdvertising->start();
     
-    Serial.println("BLE Initialized. Advertising: Mochi_Case");
+    Serial.println("BLE Initialized. Advertising: Mochi_Case (Control & Battery)");
 }
 
 bool bleIsConnected() {
     return isConnected;
 }
+
+void bleUpdateBattery(uint8_t percent) {
+    if (pBatteryLevelChar != nullptr) {
+        pBatteryLevelChar->setValue(&percent, 1);
+        if (bleIsConnected()) {
+            pBatteryLevelChar->notify();
+            Serial.printf("BLE: Notified battery percentage: %d%%\n", percent);
+        }
+    }
+}
+

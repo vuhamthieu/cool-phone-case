@@ -8,15 +8,22 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     static let modeCharacteristicUUID = CBUUID(string: "beb5483e-36e1-4688-b7f5-ea07361b26a8")
     static let timeCharacteristicUUID = CBUUID(string: "e3223119-944c-477c-abf1-efac3e8b15d0")
     
+    // Standard GATT Battery service and characteristic UUIDs
+    static let batteryServiceUUID = CBUUID(string: "180F")
+    static let batteryCharacteristicUUID = CBUUID(string: "2A19")
+    
     @Published var isBluetoothReady = false
     @Published var isConnected = false
     @Published var connectionStatusText = "Disconnected"
     @Published var discoveredPeripherals = [CBPeripheral]()
     @Published var activePeripheral: CBPeripheral?
+    @Published var batteryLevel: Int = 100
     
     private var centralManager: CBCentralManager!
     private var modeCharacteristic: CBCharacteristic?
     private var timeCharacteristic: CBCharacteristic?
+    private var batteryCharacteristic: CBCharacteristic?
+
     
     override init() {
         super.init()
@@ -101,7 +108,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         isConnected = true
         connectionStatusText = "Connected to \(peripheral.name ?? "Device")"
-        peripheral.discoverServices([Self.serviceUUID])
+        peripheral.discoverServices([Self.serviceUUID, Self.batteryServiceUUID])
     }
     
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
@@ -114,6 +121,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         isConnected = false
         modeCharacteristic = nil
         timeCharacteristic = nil
+        batteryCharacteristic = nil
         activePeripheral = nil
         connectionStatusText = "Disconnected"
         startScanning()
@@ -128,6 +136,8 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
             for service in services {
                 if service.uuid == Self.serviceUUID {
                     peripheral.discoverCharacteristics([Self.modeCharacteristicUUID, Self.timeCharacteristicUUID], for: service)
+                } else if service.uuid == Self.batteryServiceUUID {
+                    peripheral.discoverCharacteristics([Self.batteryCharacteristicUUID], for: service)
                 }
             }
         }
@@ -146,6 +156,28 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
                     print("Found Time Characteristic")
                     // Sync time automatically on connect
                     syncTime()
+                } else if characteristic.uuid == Self.batteryCharacteristicUUID {
+                    batteryCharacteristic = characteristic
+                    print("Found Battery Characteristic")
+                    peripheral.setNotifyValue(true, for: characteristic)
+                    peripheral.readValue(for: characteristic) // read initially
+                }
+            }
+        }
+    }
+    
+    func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
+        guard error == nil else {
+            print("BLE Error updating value: \(error?.localizedDescription ?? "unknown")")
+            return
+        }
+        
+        if characteristic.uuid == Self.batteryCharacteristicUUID {
+            if let data = characteristic.value, let rawBattery = data.first {
+                let level = Int(rawBattery)
+                DispatchQueue.main.async {
+                    self.batteryLevel = level
+                    print("BLE: Updated battery level: \(level)%")
                 }
             }
         }

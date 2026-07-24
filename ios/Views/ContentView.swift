@@ -42,18 +42,22 @@ struct ContentView: View {
                                 Spacer()
                                 
                                 if bleManager.isConnected {
-                                    Button(action: {
-                                        bleManager.disconnect()
-                                    }) {
-                                        Text("DISCONNECT")
-                                            .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                            .foregroundColor(.red)
-                                            .padding(.horizontal, 12)
-                                            .padding(.vertical, 6)
-                                            .overlay(
-                                                Rectangle()
-                                                    .stroke(Color.red, lineWidth: 1.5)
-                                            )
+                                    HStack(spacing: 12) {
+                                        BatteryIndicatorView(level: bleManager.batteryLevel)
+                                        
+                                        Button(action: {
+                                            bleManager.disconnect()
+                                        }) {
+                                            Text("DISCONNECT")
+                                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                                .foregroundColor(.red)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 6)
+                                                .overlay(
+                                                    Rectangle()
+                                                        .stroke(Color.red, lineWidth: 1.5)
+                                                )
+                                        }
                                     }
                                 } else {
                                     Button(action: {
@@ -233,3 +237,67 @@ struct ContentView: View {
         }
     }
 }
+
+struct BatteryIndicatorView: View {
+    let level: Int
+    @State private var isPulsing = false
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: batteryIconName)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(batteryColor)
+                .scaleEffect(level <= 30 && isPulsing ? 1.15 : 1.0)
+                .opacity(level <= 30 && isPulsing ? 0.4 : 1.0)
+            
+            Text("\(level)%")
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .foregroundColor(batteryColor)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .overlay(
+            Rectangle()
+                .stroke(batteryColor, lineWidth: 1)
+        )
+        .onAppear {
+            if level <= 30 {
+                withAnimation(Animation.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
+                    isPulsing = true
+                }
+            }
+        }
+        .onChange(of: level) { newLevel in
+            if newLevel <= 30 {
+                withAnimation(Animation.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
+                    isPulsing = true
+                }
+            } else {
+                withAnimation {
+                    isPulsing = false
+                }
+            }
+        }
+    }
+    
+    private var batteryIconName: String {
+        if level > 80 {
+            return "battery.100"
+        } else if level > 30 {
+            return "battery.50"
+        } else {
+            return "battery.25"
+        }
+    }
+    
+    private var batteryColor: Color {
+        if level > 80 {
+            return .green
+        } else if level > 30 {
+            return .yellow
+        } else {
+            return .red
+        }
+    }
+}
+
