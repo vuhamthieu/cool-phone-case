@@ -9,6 +9,7 @@ targets:
     sources:
       - path: ios
     info:
+      path: ios/Info.plist
       properties:
         NSCameraUsageDescription: "Streaming retro video to OLED"
         NSBluetoothAlwaysUsageDescription: "Sending commands to ESP32"
