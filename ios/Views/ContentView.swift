@@ -32,11 +32,11 @@ struct ContentView: View {
                             HStack {
                                 Circle()
                                     .fill(bleManager.isConnected ? Color.white : Color.red)
-                                    .frame(width: 10, height: 10)
+                                    .frame(width: 8, height: 8)
                                     .shadow(color: bleManager.isConnected ? .white : .red, radius: 4)
                                 
                                 Text(bleManager.connectionStatusText.uppercased())
-                                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                    .font(.system(size: 13, weight: .bold, design: .monospaced))
                                     .foregroundColor(.white)
                                 
                                 Spacer()
@@ -53,9 +53,11 @@ struct ContentView: View {
                                                 .foregroundColor(.red)
                                                 .padding(.horizontal, 12)
                                                 .padding(.vertical, 6)
+                                                .background(Color.red.opacity(0.1))
+                                                .cornerRadius(8)
                                                 .overlay(
-                                                    Rectangle()
-                                                        .stroke(Color.red, lineWidth: 1.5)
+                                                    RoundedRectangle(cornerRadius: 8)
+                                                        .stroke(Color.red.opacity(0.5), lineWidth: 1)
                                                 )
                                         }
                                     }
@@ -72,9 +74,11 @@ struct ContentView: View {
                                         .foregroundColor(.white)
                                         .padding(.horizontal, 12)
                                         .padding(.vertical, 6)
+                                        .background(Color.white.opacity(0.05))
+                                        .cornerRadius(8)
                                         .overlay(
-                                            Rectangle()
-                                                .stroke(Color.white, lineWidth: 1.5)
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(Color.white.opacity(0.3), lineWidth: 1)
                                         )
                                     }
                                 }
@@ -82,11 +86,11 @@ struct ContentView: View {
                             
                             // Discovered devices list when searching
                             if !bleManager.isConnected && !bleManager.discoveredPeripherals.isEmpty {
-                                Divider().background(Color.white.opacity(0.3))
+                                Divider().background(Color.gray.opacity(0.3))
                                 
-                                VStack(alignment: .leading, spacing: 8) {
+                                VStack(alignment: .leading, spacing: 10) {
                                     Text("DISCOVERED DEVICES:")
-                                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
                                         .foregroundColor(.gray)
                                     
                                     ForEach(bleManager.discoveredPeripherals, id: \.identifier) { device in
@@ -96,18 +100,21 @@ struct ContentView: View {
                                             HStack {
                                                 Image(systemName: "candybarphone")
                                                     .foregroundColor(.white)
+                                                    .font(.system(size: 14))
                                                 Text((device.name ?? "UNKNOWN DEVICE").uppercased())
                                                     .foregroundColor(.white)
-                                                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                                    .font(.system(size: 12, weight: .bold, design: .monospaced))
                                                 Spacer()
                                                 Image(systemName: "chevron.right")
                                                     .foregroundColor(.white)
+                                                    .font(.system(size: 12))
                                             }
-                                            .padding(10)
-                                            .background(Color.white.opacity(0.08))
+                                            .padding(12)
+                                            .background(Color.white.opacity(0.04))
+                                            .cornerRadius(8)
                                             .overlay(
-                                                Rectangle()
-                                                    .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                                RoundedRectangle(cornerRadius: 8)
+                                                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
                                             )
                                         }
                                     }
@@ -115,47 +122,63 @@ struct ContentView: View {
                             }
                         }
                         .padding(18)
-                        .background(Color.black)
+                        .background(Color.white.opacity(0.02))
+                        .cornerRadius(16)
                         .overlay(
-                            Rectangle()
-                                .stroke(Color.white, lineWidth: 1.5)
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.gray.opacity(0.25), lineWidth: 1.5)
                         )
                         
-                        // --- MODE SELECTOR CARD ---
+                        // --- MODE SELECTOR CARD (MODERNIZED) ---
                         VStack(alignment: .leading, spacing: 14) {
                             Text("SELECT MAIN MODE")
                                 .font(.system(size: 11, weight: .bold, design: .monospaced))
                                 .foregroundColor(.gray)
+                                .padding(.horizontal, 4)
                             
-                            Picker("System Mode", selection: $selectedMode) {
-                                Text("Clock").tag(0)
-                                Text("Mochi").tag(1)
-                                Text("Camera").tag(2)
-                            }
-                            .pickerStyle(SegmentedPickerStyle())
-                            .onChange(of: selectedMode) { newValue in
-                                bleManager.sendMode(UInt8(newValue))
-                            }
-                            .disabled(!bleManager.isConnected)
+                            ModernSegmentedControl(
+                                selectedIndex: $selectedMode,
+                                options: ["Clock", "Mochi", "Camera"],
+                                isEnabled: bleManager.isConnected,
+                                onChange: { newValue in
+                                    bleManager.sendMode(UInt8(newValue))
+                                }
+                            )
                             
                             if !bleManager.isConnected {
                                 Text("Connect to your Mochi case via Bluetooth to switch modes.")
                                     .font(.system(size: 11, design: .monospaced))
                                     .foregroundColor(.red)
                                     .padding(.top, 4)
+                                    .padding(.horizontal, 4)
                             }
                         }
                         .padding(18)
-                        .background(Color.black)
+                        .background(Color.white.opacity(0.02))
+                        .cornerRadius(16)
                         .overlay(
-                            Rectangle()
-                                .stroke(Color.white, lineWidth: 1.5)
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.gray.opacity(0.25), lineWidth: 1.5)
                         )
                         
                         // --- ACTIONS / UTILITIES ---
                         if selectedMode == 0 && bleManager.isConnected {
                             // Clock Face controls
-                            VStack(spacing: 16) {
+                            VStack(alignment: .leading, spacing: 16) {
+                                Text("MY WATCH FACES")
+                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.gray)
+                                    .padding(.horizontal, 4)
+                                
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 16) {
+                                        WatchFaceCard(name: "Retro Digital", symbol: "clock")
+                                        WatchFaceCard(name: "Analog", symbol: "dial.low")
+                                        WatchFaceCard(name: "Binary", symbol: "timer")
+                                    }
+                                    .padding(.vertical, 4)
+                                }
+                                
                                 Button(action: {
                                     bleManager.syncTime()
                                     let formatter = DateFormatter()
@@ -165,65 +188,60 @@ struct ContentView: View {
                                     HStack {
                                         Image(systemName: "clock.arrow.2.circlepath")
                                         Text("SYNC TIME WITH IPHONE")
-                                            .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                            .font(.system(size: 12, weight: .bold, design: .monospaced))
                                     }
                                     .frame(maxWidth: .infinity)
                                     .padding()
                                     .background(Color.white)
                                     .foregroundColor(.black)
-                                    .overlay(
-                                        Rectangle()
-                                            .stroke(Color.white, lineWidth: 1.5)
-                                    )
+                                    .cornerRadius(12)
                                 }
                                 
                                 HStack {
+                                    Spacer()
                                     Text("LAST SYNCED:")
-                                        .font(.system(size: 11, design: .monospaced))
+                                        .font(.system(size: 10, design: .monospaced))
                                         .foregroundColor(.gray)
                                     Text(lastSyncedTimeText.uppercased())
-                                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
                                         .foregroundColor(.white)
+                                    Spacer()
                                 }
                             }
                             .padding(18)
-                            .background(Color.black)
+                            .background(Color.white.opacity(0.02))
+                            .cornerRadius(16)
                             .overlay(
-                                Rectangle()
-                                    .stroke(Color.white, lineWidth: 1.5)
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(Color.gray.opacity(0.25), lineWidth: 1.5)
                             )
                         } else if selectedMode == 1 && bleManager.isConnected {
-                            // Mochi information
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack {
-                                    Image(systemName: "face.smiling")
-                                        .foregroundColor(.white)
-                                        .font(.title2)
+                            // Mochi Visual Emotion Grid
+                            VStack(alignment: .leading, spacing: 16) {
+                                VStack(alignment: .leading, spacing: 6) {
                                     Text("MOCHI EMOTION GUIDE")
-                                        .font(.system(size: 16, weight: .bold, design: .monospaced))
-                                        .foregroundColor(.white)
+                                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                        .foregroundColor(.gray)
+                                    Text("Interact with the capacitive touch sensor on the case to trigger these expressions:")
+                                        .font(.system(size: 11, design: .monospaced))
+                                        .foregroundColor(.gray)
                                 }
+                                .padding(.horizontal, 4)
                                 
-                                Text("Interact with the Capacitive Touch Sensor on the phone case to play animations:")
-                                    .font(.system(size: 13, design: .monospaced))
-                                    .foregroundColor(.gray)
-                                    .padding(.top, 4)
-                                
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Label("Idle: Default Face", systemImage: "dot.circle").foregroundColor(.white)
-                                    Label("1 Tap: What Face (2s)", systemImage: "dot.circle").foregroundColor(.white)
-                                    Label("2 Taps: Judging Face (2.5s)", systemImage: "dot.circle").foregroundColor(.white)
-                                    Label("Rub/Hold: Happy Face", systemImage: "dot.circle").foregroundColor(.white)
-                                    Label("Rub > 15s: Angry Face", systemImage: "dot.circle").foregroundColor(.white)
+                                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                                    MochiEmotionCard(name: "Idle", symbol: "face.smiling", gesture: "Default Face")
+                                    MochiEmotionCard(name: "What", symbol: "questionmark.circle", gesture: "1 Tap")
+                                    MochiEmotionCard(name: "Judging", symbol: "eye.circle", gesture: "2+ Taps")
+                                    MochiEmotionCard(name: "Happy", symbol: "face.smiling.fill", gesture: "Rub/Hold")
+                                    MochiEmotionCard(name: "Angry", symbol: "flame.fill", gesture: "Rub > 15s")
                                 }
-                                .font(.system(size: 12, design: .monospaced))
-                                .padding(.top, 4)
                             }
                             .padding(18)
-                            .background(Color.black)
+                            .background(Color.white.opacity(0.02))
+                            .cornerRadius(16)
                             .overlay(
-                                Rectangle()
-                                    .stroke(Color.white, lineWidth: 1.5)
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(Color.gray.opacity(0.25), lineWidth: 1.5)
                             )
                         } else if selectedMode == 2 && bleManager.isConnected {
                             // Camera Streaming View!
@@ -235,6 +253,121 @@ struct ContentView: View {
             }
             .navigationBarHidden(true)
         }
+    }
+}
+
+struct ModernSegmentedControl: View {
+    @Binding var selectedIndex: Int
+    let options: [String]
+    let isEnabled: Bool
+    let onChange: (Int) -> Void
+    
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(0..<options.count, id: \.self) { index in
+                Button(action: {
+                    if isEnabled {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            selectedIndex = index
+                        }
+                        onChange(index)
+                    }
+                }) {
+                    Text(options[index].uppercased())
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .foregroundColor(selectedIndex == index ? .black : (isEnabled ? .white : .gray))
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            ZStack {
+                                if selectedIndex == index {
+                                    Color.white
+                                        .cornerRadius(8)
+                                } else {
+                                    Color.clear
+                                }
+                            }
+                        )
+                }
+            }
+        }
+        .padding(4)
+        .background(Color.white.opacity(0.06))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+        )
+        .opacity(isEnabled ? 1.0 : 0.5)
+    }
+}
+
+struct WatchFaceCard: View {
+    let name: String
+    let symbol: String
+    
+    var body: some View {
+        VStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(0.04))
+                    .frame(width: 80, height: 80)
+                    .overlay(
+                        Circle()
+                            .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                    )
+                
+                Image(systemName: symbol)
+                    .font(.system(size: 30))
+                    .foregroundColor(.white)
+            }
+            
+            Text(name.uppercased())
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundColor(.white)
+        }
+        .frame(width: 100)
+    }
+}
+
+struct MochiEmotionCard: View {
+    let name: String
+    let symbol: String
+    let gesture: String
+    
+    var body: some View {
+        VStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(0.04))
+                    .frame(width: 48, height: 48)
+                    .overlay(
+                        Circle()
+                            .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                    )
+                
+                Image(systemName: symbol)
+                    .font(.system(size: 20))
+                    .foregroundColor(.white)
+            }
+            
+            VStack(spacing: 2) {
+                Text(name.uppercased())
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundColor(.white)
+                Text(gesture.uppercased())
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundColor(.gray)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
+        .background(Color.white.opacity(0.02))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+        )
     }
 }
 
@@ -257,7 +390,7 @@ struct BatteryIndicatorView: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .overlay(
-            Rectangle()
+            RoundedRectangle(cornerRadius: 6)
                 .stroke(batteryColor, lineWidth: 1)
         )
         .onAppear {
@@ -300,4 +433,3 @@ struct BatteryIndicatorView: View {
         }
     }
 }
-
