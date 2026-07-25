@@ -1,6 +1,6 @@
 # OverByte: The Second Screen Phone Case
 
-![OverByte Showcase]([link])
+![OverByte 3D Concept](assets/tilt.png)
 
 ## Overview
 
@@ -8,7 +8,7 @@ So recently, I had this idea for a working second screen on the back of the phon
 
 That's basically how **OverByte** started. It’s a custom-built, cyberpunk-style smart case with a 1-bit OLED display, a touch sensor, and a native iOS app that connects via BLE. 
 
-Nothing too crazy or battery-draining—just a raw, minimalist screen that shows the time, reacts to your touch with some fun emotes, and even streams the iPhone's camera. Just a fun little side project to make the back of the phone less boring! 
+Nothing too crazy or battery-draining—just a raw, minimalist screen that shows the time, reacts to your touch with some fun emotes, and even streams the iPhone's camera. Just a fun little side project to make the back of the phone less boring! 🚀
 
 ## Key Features
 
@@ -23,8 +23,6 @@ Nothing too crazy or battery-draining—just a raw, minimalist screen that shows
 
 The hardware footprint is highly optimized for thickness and power efficiency, designed to seamlessly integrate into a custom 3D-printed phone case form factor.
 
-![PCB Render]([đường_dẫn_ảnh_PCB_3D_render_vào_đây.png])
-
 *   **Microcontroller:** ESP32 (Manages BLE stack, display rendering, and touch interrupts)
 *   **Display:** 128x64 Monochromatic OLED (SH1106/SSD1306) via I2C
 *   **Sensor:** TTP223 Capacitive Touch Module
@@ -32,10 +30,10 @@ The hardware footprint is highly optimized for thickness and power efficiency, d
 
 ### Hardware Repository
 All PCB designs, schematics, and mechanical files are open-source and available for review:
-*   [Schematic Documentation (PDF)]([link_đến_file_schematic.pdf])
-*   [Bill of Materials (BOM)]([link_đến_file_BOM.csv_hoặc_html])
-*   [Gerber Manufacturing Files]([link_đến_thư_mục_gerber])
-*   [3D Enclosure Models (STL/STEP)]([link_đến_thư_mục_chứa_file_3d_ốp_lưng])
+*   [Schematic Documentation (Image)](assets/schematic.png)
+*   [Bill of Materials (BOM)]([add_your_BOM_file_here.csv])
+*   [Gerber Manufacturing Files](hardware/gerber/)
+*   [3D Enclosure Models (STL/STEP)](hardware/3d_models/)
 
 ---
 
@@ -70,11 +68,17 @@ To avoid merge conflicts with Xcode project files, this repository uses `XcodeGe
 
 ---
 
-## Gallery
+## Progress & Gallery
 
-| Schematic Design | Hardware Assembly | iOS Interface |
+### 3D Enclosure Concept
+| Front View | Tilt View | Back View |
 | :---: | :---: | :---: |
-| <img src="[link_ảnh_schematic]" width="250"> | <img src="[link_ảnh_mạch_thật]" width="250"> | <img src="[link_ảnh_chụp_màn_hình_app_iOS]" width="250"> |
+| <img src="assets/front.png" width="250"> | <img src="assets/tilt.png" width="250"> | <img src="assets/back.png" width="250"> |
+
+### Hardware Design
+| Schematic | PCB Layout | 3D PCB Render |
+| :---: | :---: | :---: |
+| <img src="assets/schematic.png" width="250"> | <img src="assets/pcb.png" width="250"> | <img src="assets/pcb_3d.png" width="250"> |
 
 ## License
 This project is licensed under the MIT License. See the `LICENSE` file for full details.
