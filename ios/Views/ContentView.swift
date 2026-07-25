@@ -435,7 +435,6 @@ struct CapsuleSettingButton: View {
             HStack(spacing: 10) {
                 Circle()
                     .stroke(Color.white, lineWidth: 1)
-                    .fill(isSelected ? Color.white : Color.clear)
                     .frame(width: 8, height: 8)
                     .overlay(
                         Circle()
