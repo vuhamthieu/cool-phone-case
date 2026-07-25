@@ -9,7 +9,7 @@ struct OverByteApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(bleManager)
-                .preferredColorScheme(.dark) // Dark mode fits the premium OverByte case theme
+                .preferredColorScheme(.dark)
         }
     }
 }
