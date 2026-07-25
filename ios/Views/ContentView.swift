@@ -57,7 +57,7 @@ struct ContentView: View {
                             ZStack {
                                 // OLED simulated screen
                                 RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color(white: 0.02))
+                                    .fill(Color.white.opacity(0.02))
                                     .frame(height: 160)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 12)
