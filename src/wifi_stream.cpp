@@ -49,8 +49,8 @@ void wifiStreamInit() {
     }
 
     // Initialize ArduinoOTA
-    ArduinoOTA.setHostname("MochiCase");
-    ArduinoOTA.setPassword("mochicase123");
+    ArduinoOTA.setHostname("OverByte");
+    ArduinoOTA.setPassword(OTA_PASSWORD);
     
     ArduinoOTA.onStart([]() {
         Serial.println("OTA Update Started...");

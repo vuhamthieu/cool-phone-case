@@ -8,8 +8,11 @@
 #define CHARACTERISTIC_TIME_UUID    "e3223119-944c-477c-abf1-efac3e8b15d0"
 
 // Wi-Fi Config for Camera Streaming
-#define AP_SSID     "MochiCase_AP"
-#define AP_PASSWORD "mochicase123"
+#if __has_include("secrets.h")
+#include "secrets.h"
+#else
+#error "secrets.h is missing! Copy secrets.h.example to secrets.h and customize your local credentials."
+#endif
 #define UDP_PORT    5001
 
 // 3 Main Modes
