@@ -4,8 +4,17 @@ import WebKit
 struct ContentView: View {
     @EnvironmentObject var bleManager: BLEManager
     
-    // Tab index: 0: Home, 1: Faces, 2: Camera
-    @State private var selectedTab = 0
+    // Core modes: 0: Clock, 1: Emote, 2: Camera
+    @State private var selectedMode = 0
+    @State private var lastSyncedTimeText = "Never"
+    
+    // Sub-states for preview customization
+    @State private var selectedClockStyle = 0 // 0: Retro, 1: Analog, 2: Binary
+    @State private var selectedEmote = 0      // 0: Idle, 1: What, 2: Judging, 3: Happy, 4: Angry
+    @State private var selectedFilter = 0     // 0: Normal, 1: Mono, 2: Negative, 3: Posterize
+    
+    @State private var timeString = "10:34"
+    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     
     var body: some View {
         NavigationView {
@@ -13,427 +22,230 @@ struct ContentView: View {
                 // Background pure black
                 Color.black.ignoresSafeArea()
                 
-                VStack(spacing: 0) {
-                    // Main View Content Switcher
-                    Group {
-                        if selectedTab == 0 {
-                            HomeView()
-                        } else if selectedTab == 1 {
-                            FacesView()
-                        } else if selectedTab == 2 {
-                            CameraView()
+                ScrollView {
+                    VStack(spacing: 24) {
+                        
+                        // --- HEADER BAR ---
+                        HStack {
+                            Text("OVERBYTE")
+                                .font(.system(size: 16, weight: .black, design: .monospaced))
+                                .foregroundColor(.white)
+                                .tracking(2)
+                            
+                            Spacer()
+                            
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(bleManager.isConnected ? Color.green : Color.red)
+                                    .frame(width: 6, height: 6)
+                                Text(bleManager.isConnected ? "● BLE" : "○ BLE")
+                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    .foregroundColor(bleManager.isConnected ? .white : .gray)
+                            }
+                        }
+                        .padding(.top, 16)
+                        .padding(.horizontal, 4)
+                        
+                        // --- PREVIEW SECTION ---
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("PREVIEW")
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundColor(.gray)
+                                .tracking(1)
+                                .padding(.horizontal, 4)
+                            
+                            ZStack {
+                                // OLED simulated screen
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color(white: 0.02))
+                                    .frame(height: 160)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(Color.white.opacity(0.15), lineWidth: 1.5)
+                                    )
+                                
+                                // Viewfinder bracket decoration
+                                PreviewViewfinder()
+                                    .opacity(0.6)
+                                
+                                // Dynamic preview based on mode
+                                if selectedMode == 0 {
+                                    ClockPreviewView(style: selectedClockStyle, timeString: timeString)
+                                } else if selectedMode == 1 {
+                                    EmotePreviewView(emotionIndex: selectedEmote)
+                                } else if selectedMode == 2 {
+                                    CameraPreviewView(filterIndex: selectedFilter)
+                                }
+                            }
+                            .frame(height: 160)
+                        }
+                        
+                        // --- WIDGETS GRID ---
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("WIDGETS")
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundColor(.gray)
+                                .tracking(1)
+                                .padding(.horizontal, 4)
+                            
+                            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                                // Mode selector widgets (Clock, Emote, Camera)
+                                WidgetButton(title: "Clock", iconName: "clock", isActive: bleManager.isConnected && selectedMode == 0) {
+                                    if bleManager.isConnected {
+                                        selectedMode = 0
+                                        bleManager.sendMode(0)
+                                    }
+                                }
+                                
+                                WidgetButton(title: "Emote", iconName: "face.smiling", isActive: bleManager.isConnected && selectedMode == 1) {
+                                    if bleManager.isConnected {
+                                        selectedMode = 1
+                                        bleManager.sendMode(1)
+                                    }
+                                }
+                                
+                                WidgetButton(title: "Camera", iconName: "camera", isActive: bleManager.isConnected && selectedMode == 2) {
+                                    if bleManager.isConnected {
+                                        selectedMode = 2
+                                        bleManager.sendMode(2)
+                                    }
+                                }
+                                
+                                // Utility widgets (Sync, Battery, OTA)
+                                WidgetButton(title: "Sync Time", iconName: "clock.arrow.2.circlepath", isActive: false) {
+                                    if bleManager.isConnected {
+                                        bleManager.syncTime()
+                                        let formatter = DateFormatter()
+                                        formatter.timeStyle = .medium
+                                        lastSyncedTimeText = formatter.string(from: Date())
+                                    }
+                                }
+                                
+                                WidgetButton(title: "Battery (\(bleManager.batteryLevel)%)", iconName: bleManager.batteryLevel > 30 ? "battery.100" : "battery.25", isActive: false) {
+                                    // Static info widget
+                                }
+                                
+                                WidgetButton(title: "OTA Update", iconName: "arrow.up.doc", isActive: false) {
+                                    // Status info
+                                }
+                                
+                                // Decorative widgets (Snake, Compass, Light)
+                                WidgetButton(title: "Snake", iconName: "play", isActive: false) {}
+                                WidgetButton(title: "Compass", iconName: "compass.drawing", isActive: false) {}
+                                WidgetButton(title: "Light", iconName: "sun.max", isActive: false) {}
+                            }
+                        }
+                        
+                        // --- BACKGROUND / EXTRA SETTINGS SECTION ---
+                        VStack(alignment: .leading, spacing: 12) {
+                            if selectedMode == 0 {
+                                Text("CLOCK STYLE")
+                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.gray)
+                                    .tracking(1)
+                                    .padding(.horizontal, 4)
+                                
+                                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                                    CapsuleSettingButton(title: "Retro Digital", isSelected: selectedClockStyle == 0) {
+                                        selectedClockStyle = 0
+                                    }
+                                    CapsuleSettingButton(title: "Analog Face", isSelected: selectedClockStyle == 1) {
+                                        selectedClockStyle = 1
+                                    }
+                                    CapsuleSettingButton(title: "Binary Face", isSelected: selectedClockStyle == 2) {
+                                        selectedClockStyle = 2
+                                    }
+                                }
+                            } else if selectedMode == 1 {
+                                Text("EMOTE SELECT")
+                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.gray)
+                                    .tracking(1)
+                                    .padding(.horizontal, 4)
+                                
+                                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                                    CapsuleSettingButton(title: "Idle Face", isSelected: selectedEmote == 0) {
+                                        selectedEmote = 0
+                                    }
+                                    CapsuleSettingButton(title: "What Face", isSelected: selectedEmote == 1) {
+                                        selectedEmote = 1
+                                    }
+                                    CapsuleSettingButton(title: "Judging", isSelected: selectedEmote == 2) {
+                                        selectedEmote = 2
+                                    }
+                                    CapsuleSettingButton(title: "Happy Face", isSelected: selectedEmote == 3) {
+                                        selectedEmote = 3
+                                    }
+                                    CapsuleSettingButton(title: "Angry Face", isSelected: selectedEmote == 4) {
+                                        selectedEmote = 4
+                                    }
+                                }
+                            } else if selectedMode == 2 {
+                                Text("STREAM FILTER")
+                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.gray)
+                                    .tracking(1)
+                                    .padding(.horizontal, 4)
+                                
+                                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                                    CapsuleSettingButton(title: "Normal", isSelected: selectedFilter == 0) {
+                                        selectedFilter = 0
+                                    }
+                                    CapsuleSettingButton(title: "Monochrome", isSelected: selectedFilter == 1) {
+                                        selectedFilter = 1
+                                    }
+                                    CapsuleSettingButton(title: "Negative", isSelected: selectedFilter == 2) {
+                                        selectedFilter = 2
+                                    }
+                                    CapsuleSettingButton(title: "Posterize", isSelected: selectedFilter == 3) {
+                                        selectedFilter = 3
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Device scan controls for disconnected state
+                        if !bleManager.isConnected {
+                            VStack(spacing: 12) {
+                                Image(systemName: "bolt.horizontal.circle")
+                                    .font(.system(size: 32))
+                                    .foregroundColor(.red)
+                                Text("DEVICE DISCONNECTED")
+                                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.white)
+                                Text("Please connect to your OVERBYTE case via Bluetooth to access controls.")
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .foregroundColor(.gray)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 16)
+                            }
+                            .padding(.vertical, 40)
+                            .frame(maxWidth: .infinity)
+                            .background(Color.white.opacity(0.01))
+                            .cornerRadius(12)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.red.opacity(0.3), lineWidth: 1)
+                            )
                         }
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(.horizontal, 16)
-                    
-                    // Custom Bottom Tab Bar
-                    CustomTabBar(selectedTab: $selectedTab)
+                    .padding(.bottom, 24)
                 }
             }
             .navigationBarHidden(true)
-        }
-    }
-}
-
-// MARK: - Tab Views
-
-struct HomeView: View {
-    @EnvironmentObject var bleManager: BLEManager
-    
-    var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: 24) {
-                // Top title: 'OverByte'
-                HStack {
-                    Text("OVERBYTE")
-                        .font(.system(size: 24, weight: .black, design: .monospaced))
-                        .foregroundColor(.white)
-                        .tracking(2)
-                    Spacer()
-                }
-                .padding(.top, 16)
-                
-                // Middle: Bounding box acting as the 'Preview OLED faces' area
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("PREVIEW OLED FACES")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundColor(.gray)
-                        .tracking(1)
-                        .padding(.horizontal, 4)
-                    
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.white, lineWidth: 1)
-                            .frame(height: 180)
-                            .background(Color(white: 0.02))
-                            .cornerRadius(16)
-                        
-                        PreviewViewframe()
-                            .opacity(0.6)
-                        
-                        GifImageView(gifName: "default")
-                            .frame(width: 140, height: 110)
-                    }
-                }
-                
-                // Below Preview: BatteryIndicatorView
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("BATTERY STATUS")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundColor(.gray)
-                        .tracking(1)
-                        .padding(.horizontal, 4)
-                    
-                    BatteryIndicatorView(level: bleManager.batteryLevel)
-                }
-                
-                // Bottom area: Connection/Scan button card
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("CONNECTION")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundColor(.gray)
-                        .tracking(1)
-                        .padding(.horizontal, 4)
-                    
-                    VStack(spacing: 12) {
-                        HStack {
-                            Circle()
-                                .fill(bleManager.isConnected ? Color.green : Color.red)
-                                .frame(width: 8, height: 8)
-                            
-                            Text(bleManager.connectionStatusText.uppercased())
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundColor(.white)
-                            
-                            Spacer()
-                        }
-                        
-                        if bleManager.isConnected {
-                            Button(action: {
-                                bleManager.disconnect()
-                            }) {
-                                Text("DISCONNECT DEVICE")
-                                    .font(.system(size: 12, weight: .bold, design: .monospaced))
-                                    .foregroundColor(.red)
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(Color.black)
-                                    .cornerRadius(8)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(Color.red, lineWidth: 1)
-                                    )
-                            }
-                        } else {
-                            Button(action: {
-                                bleManager.startScanning()
-                            }) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "arrow.clockwise")
-                                    Text("SCAN DEVICE")
-                                }
-                                .font(.system(size: 12, weight: .bold, design: .monospaced))
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.black)
-                                .cornerRadius(8)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color.white, lineWidth: 1)
-                                )
-                            }
-                        }
-                    }
-                    .padding(16)
-                    .background(Color.black)
-                    .cornerRadius(12)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                    )
-                    
-                    // Discovered Devices list
-                    if !bleManager.isConnected && !bleManager.discoveredPeripherals.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("DISCOVERED DEVIATION:")
-                                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                .foregroundColor(.gray)
-                            
-                            ForEach(bleManager.discoveredPeripherals, id: \.identifier) { device in
-                                Button(action: {
-                                    bleManager.connect(to: device)
-                                }) {
-                                    HStack {
-                                        Image(systemName: "candybarphone")
-                                        Text((device.name ?? "UNKNOWN DEVICE").uppercased())
-                                            .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                        Spacer()
-                                        Image(systemName: "chevron.right")
-                                    }
-                                    .foregroundColor(.white)
-                                    .padding(12)
-                                    .background(Color.white.opacity(0.04))
-                                    .cornerRadius(8)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                                    )
-                                }
-                            }
-                        }
-                        .padding(.top, 8)
-                    }
-                }
-            }
-            .padding(.bottom, 24)
-        }
-    }
-}
-
-struct FacesView: View {
-    @EnvironmentObject var bleManager: BLEManager
-    
-    @State private var previewingFace = true
-    @State private var selectedFaceIndex = 0
-    @State private var selectedEmoteIndex = 0
-    
-    var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: 24) {
-                // Top title: 'OverByte'
-                HStack {
-                    Text("OVERBYTE")
-                        .font(.system(size: 24, weight: .black, design: .monospaced))
-                        .foregroundColor(.white)
-                        .tracking(2)
-                    Spacer()
-                }
-                .padding(.top, 16)
-                
-                // Preview bounding box
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("PREVIEW")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundColor(.gray)
-                        .tracking(1)
-                        .padding(.horizontal, 4)
-                    
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.white, lineWidth: 1)
-                            .frame(height: 180)
-                            .background(Color(white: 0.02))
-                            .cornerRadius(16)
-                        
-                        PreviewViewframe()
-                            .opacity(0.6)
-                        
-                        if previewingFace {
-                            ClockPreviewView(style: selectedFaceIndex)
-                        } else {
-                            EmotePreviewView(emotionIndex: selectedEmoteIndex)
-                        }
-                    }
-                }
-                
-                // CLOCK carousel
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("CLOCK")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundColor(.gray)
-                        .tracking(1)
-                        .padding(.horizontal, 4)
-                    
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 14) {
-                            CarouselCard(title: "Retro", isSelected: previewingFace && selectedFaceIndex == 0, gifName: "retro_clock") {
-                                previewingFace = true
-                                selectedFaceIndex = 0
-                                if bleManager.isConnected {
-                                    bleManager.sendMode(0)
-                                }
-                            }
-                            CarouselCard(title: "Analog", isSelected: previewingFace && selectedFaceIndex == 1, gifName: "analog_clock") {
-                                previewingFace = true
-                                selectedFaceIndex = 1
-                                if bleManager.isConnected {
-                                    bleManager.sendMode(0)
-                                }
-                            }
-                            CarouselCard(title: "Binary", isSelected: previewingFace && selectedFaceIndex == 2, gifName: "binary_clock") {
-                                previewingFace = true
-                                selectedFaceIndex = 2
-                                if bleManager.isConnected {
-                                    bleManager.sendMode(0)
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 4)
-                    }
-                }
-                
-                // EMOTE carousel
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("EMOTE")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundColor(.gray)
-                        .tracking(1)
-                        .padding(.horizontal, 4)
-                    
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 14) {
-                            CarouselCard(title: "Idle", isSelected: !previewingFace && selectedEmoteIndex == 0, gifName: "default") {
-                                previewingFace = false
-                                selectedEmoteIndex = 0
-                                if bleManager.isConnected {
-                                    bleManager.sendMode(1)
-                                }
-                            }
-                            CarouselCard(title: "What", isSelected: !previewingFace && selectedEmoteIndex == 1, gifName: "what") {
-                                previewingFace = false
-                                selectedEmoteIndex = 1
-                                if bleManager.isConnected {
-                                    bleManager.sendMode(1)
-                                }
-                            }
-                            CarouselCard(title: "Judging", isSelected: !previewingFace && selectedEmoteIndex == 2, gifName: "juding") {
-                                previewingFace = false
-                                selectedEmoteIndex = 2
-                                if bleManager.isConnected {
-                                    bleManager.sendMode(1)
-                                }
-                            }
-                            CarouselCard(title: "Happy", isSelected: !previewingFace && selectedEmoteIndex == 3, gifName: "happy") {
-                                previewingFace = false
-                                selectedEmoteIndex = 3
-                                if bleManager.isConnected {
-                                    bleManager.sendMode(1)
-                                }
-                            }
-                            CarouselCard(title: "Angry", isSelected: !previewingFace && selectedEmoteIndex == 4, gifName: "angry") {
-                                previewingFace = false
-                                selectedEmoteIndex = 4
-                                if bleManager.isConnected {
-                                    bleManager.sendMode(1)
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 4)
-                    }
-                }
-            }
-            .padding(.bottom, 24)
-        }
-    }
-}
-
-struct CameraView: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Top title
-            HStack {
-                Text("OVERBYTE")
-                    .font(.system(size: 24, weight: .black, design: .monospaced))
-                    .foregroundColor(.white)
-                    .tracking(2)
-                Spacer()
-            }
-            .padding(.top, 16)
-            
-            Text("CAMERA STREAM")
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundColor(.gray)
-                .tracking(1)
-                .padding(.horizontal, 4)
-            
-            CameraStreamView()
-                .padding(8)
-                .background(Color.black)
-                .cornerRadius(16)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white, lineWidth: 1)
-                )
-            
-            Spacer()
-        }
-    }
-}
-
-// MARK: - Reusable UI Components
-
-struct CustomTabBar: View {
-    @Binding var selectedTab: Int
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            TabButton(title: "home", tabIndex: 0, selectedTab: $selectedTab)
-            TabButton(title: "faces", tabIndex: 1, selectedTab: $selectedTab)
-            TabButton(title: "camera", tabIndex: 2, selectedTab: $selectedTab)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color.black)
-    }
-}
-
-struct TabButton: View {
-    let title: String
-    let tabIndex: Int
-    @Binding var selectedTab: Int
-    
-    var body: some View {
-        Button(action: {
-            withAnimation(.easeInOut(duration: 0.15)) {
-                selectedTab = tabIndex
-            }
-        }) {
-            Text(title.uppercased())
-                .font(.system(size: 12, weight: .bold, design: .monospaced))
-                .foregroundColor(selectedTab == tabIndex ? .black : .white)
-                .padding(.vertical, 10)
-                .frame(maxWidth: .infinity)
-                .background(selectedTab == tabIndex ? Color.white : Color.black)
-                .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.white, lineWidth: 1)
-                )
-        }
-    }
-}
-
-struct CarouselCard: View {
-    let title: String
-    let isSelected: Bool
-    let gifName: String
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 8) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(isSelected ? Color.white : Color.white.opacity(0.12), lineWidth: 1)
-                        .frame(width: 100, height: 100)
-                        .background(Color.white.opacity(0.01))
-                        .cornerRadius(12)
-                    
-                    GifImageView(gifName: gifName)
-                        .frame(width: 80, height: 80)
-                }
-                
-                Text(title.uppercased())
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(isSelected ? .white : .gray)
+            .onReceive(timer) { _ in
+                let formatter = DateFormatter()
+                formatter.dateFormat = "HH:mm"
+                timeString = formatter.string(from: Date())
             }
         }
     }
 }
 
-struct PreviewViewframe: View {
+// MARK: - Subviews
+
+struct PreviewViewfinder: View {
     var body: some View {
         GeometryReader { geo in
             Path { path in
@@ -469,8 +281,7 @@ struct PreviewViewframe: View {
 
 struct ClockPreviewView: View {
     let style: Int
-    @State private var timeString = "10:34"
-    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    let timeString: String
     
     var body: some View {
         ZStack {
@@ -485,16 +296,6 @@ struct ClockPreviewView: View {
                     .tracking(2)
                     .shadow(color: .black, radius: 4)
             }
-        }
-        .onReceive(timer) { _ in
-            let formatter = DateFormatter()
-            formatter.dateFormat = "HH:mm"
-            timeString = formatter.string(from: Date())
-        }
-        .onAppear {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "HH:mm"
-            timeString = formatter.string(from: Date())
         }
     }
     
@@ -545,72 +346,120 @@ struct EmotePreviewView: View {
     }
 }
 
-struct BatteryIndicatorView: View {
-    let level: Int
-    @State private var isPulsing = false
+struct CameraPreviewView: View {
+    let filterIndex: Int
     
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: batteryIconName)
-                .font(.system(size: 11, weight: .bold))
-                .foregroundColor(batteryColor)
-                .scaleEffect(level <= 30 && isPulsing ? 1.15 : 1.0)
-                .opacity(level <= 30 && isPulsing ? 0.4 : 1.0)
+        VStack(spacing: 8) {
+            ZStack {
+                Color.black
+                    .frame(width: 80, height: 50)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color.white, lineWidth: 1)
+                    )
+                
+                Image(systemName: "camera.shutter.button")
+                    .font(.system(size: 20))
+                    .foregroundColor(.white)
+            }
             
-            Text("\(level)%")
-                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                .foregroundColor(batteryColor)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(Color.white.opacity(0.04))
-        .cornerRadius(8)
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(batteryColor.opacity(0.3), lineWidth: 1)
-        )
-        .onAppear {
-            if level <= 30 {
-                withAnimation(Animation.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
-                    isPulsing = true
-                }
-            }
-        }
-        .onChange(of: level) { newLevel in
-            if newLevel <= 30 {
-                withAnimation(Animation.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
-                    isPulsing = true
-                }
-            } else {
-                withAnimation {
-                    isPulsing = false
-                }
-            }
+            Text(filterName.uppercased())
+                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .foregroundColor(.gray)
         }
     }
     
-    private var batteryIconName: String {
-        if level > 80 {
-            return "battery.100"
-        } else if level > 30 {
-            return "battery.50"
-        } else {
-            return "battery.25"
-        }
-    }
-    
-    private var batteryColor: Color {
-        if level > 80 {
-            return .green
-        } else if level > 30 {
-            return .yellow
-        } else {
-            return .red
+    private var filterName: String {
+        switch filterIndex {
+        case 0: return "Filter: Normal"
+        case 1: return "Filter: Mono"
+        case 2: return "Filter: Negative"
+        case 3: return "Filter: Posterize"
+        default: return "Filter: Normal"
         }
     }
 }
 
-// MARK: - WKWebView GIF Engine (No Third Party Dependency)
+struct WidgetButton: View {
+    let title: String
+    let iconName: String
+    let isActive: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 12) {
+                Image(systemName: iconName)
+                    .font(.system(size: 20))
+                    .foregroundColor(isActive ? .white : .gray)
+                    .frame(height: 24)
+                
+                VStack(spacing: 4) {
+                    Text(title.uppercased())
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundColor(isActive ? .white : .gray)
+                        .tracking(1)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(1)
+                    
+                    if isActive {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 4, height: 4)
+                    } else {
+                        Spacer()
+                            .frame(height: 4)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 100)
+            .background(Color.white.opacity(0.01))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isActive ? Color.white : Color.white.opacity(0.12), lineWidth: 1)
+            )
+        }
+    }
+}
+
+struct CapsuleSettingButton: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Circle()
+                    .stroke(Color.white, lineWidth: 1)
+                    .fill(isSelected ? Color.white : Color.clear)
+                    .frame(width: 8, height: 8)
+                    .overlay(
+                        Circle()
+                            .fill(isSelected ? Color.white : Color.clear)
+                            .frame(width: 4, height: 4)
+                    )
+                
+                Text(title)
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundColor(isSelected ? .white : .gray)
+                
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(Color.black)
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isSelected ? Color.white : Color.white.opacity(0.12), lineWidth: 1)
+            )
+        }
+    }
+}
 
 struct GifImageView: UIViewRepresentable {
     let gifName: String
