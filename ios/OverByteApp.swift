@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct MochiCaseApp: App {
+struct OverByteApp: App {
     // Keep BLE Manager alive for the lifecycle of the app
     @StateObject private var bleManager = BLEManager()
     
@@ -9,7 +9,7 @@ struct MochiCaseApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(bleManager)
-                .preferredColorScheme(.dark) // Dark mode fits the premium Mochi case theme
+                .preferredColorScheme(.dark) // Dark mode fits the premium OverByte case theme
         }
     }
 }

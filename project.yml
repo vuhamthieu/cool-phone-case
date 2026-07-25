@@ -2,7 +2,7 @@ name: OverByte
 options:
   bundleIdPrefix: com.vuhamthieu
 targets:
-  MochiCase:
+  OverByte:
     type: application
     platform: iOS
     deploymentTarget: "15.0"
