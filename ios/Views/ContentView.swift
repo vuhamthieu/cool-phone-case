@@ -472,7 +472,7 @@ struct GifImageView: UIViewRepresentable {
         webView.scrollView.bounces = false
         webView.backgroundColor = .clear
         webView.scrollView.backgroundColor = .clear
-        webView.opaque = false
+        webView.isOpaque = false
         return webView
     }
     
