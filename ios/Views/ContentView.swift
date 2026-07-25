@@ -472,32 +472,229 @@ struct PreviewViewfinder: View {
     }
 }
 
+struct RetroClockPreviewView: View {
+    @State private var currentDate = Date()
+    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    
+    var body: some View {
+        VStack(spacing: 6) {
+            let timeString = timeString(from: currentDate)
+            let secondString = secondString(from: currentDate)
+            
+            // Styled matrix digital readout
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(timeString)
+                    .font(.system(size: 34, weight: .black, design: .monospaced))
+                    .foregroundColor(.white)
+                    .tracking(1)
+                
+                Text(secondString)
+                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                    .foregroundColor(.white)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color.white, lineWidth: 1.5)
+            )
+            
+            HStack {
+                Text("SYS_OK")
+                Spacer()
+                Text("SYNCED")
+            }
+            .font(.system(size: 8, weight: .bold, design: .monospaced))
+            .foregroundColor(.gray)
+            .frame(width: 100)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black)
+        .onReceive(timer) { input in
+            currentDate = input
+        }
+    }
+    
+    private func timeString(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
+    
+    private func secondString(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = ":ss"
+        return formatter.string(from: date)
+    }
+}
+
+struct AnalogClockPreviewView: View {
+    @State private var currentDate = Date()
+    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    
+    var body: some View {
+        GeometryReader { geo in
+            let size = min(geo.size.width, geo.size.height)
+            let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
+            let radius = size / 2 * 0.85
+            
+            ZStack {
+                Color.black
+                
+                // Clock Face border
+                Circle()
+                    .stroke(Color.white, lineWidth: 1.5)
+                    .frame(width: radius * 2, height: radius * 2)
+                    .position(center)
+                
+                // Center Dot
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 4, height: 4)
+                    .position(center)
+                
+                // Tick Marks
+                Path { path in
+                    let tickLen: CGFloat = 4
+                    // 12 o'clock
+                    path.move(to: CGPoint(x: center.x, y: center.y - radius))
+                    path.addLine(to: CGPoint(x: center.x, y: center.y - radius + tickLen))
+                    
+                    // 6 o'clock
+                    path.move(to: CGPoint(x: center.x, y: center.y + radius))
+                    path.addLine(to: CGPoint(x: center.x, y: center.y + radius - tickLen))
+                    
+                    // 3 o'clock
+                    path.move(to: CGPoint(x: center.x + radius, y: center.y))
+                    path.addLine(to: CGPoint(x: center.x + radius - tickLen, y: center.y))
+                    
+                    // 9 o'clock
+                    path.move(to: CGPoint(x: center.x - radius, y: center.y))
+                    path.addLine(to: CGPoint(x: center.x - radius + tickLen, y: center.y))
+                }
+                .stroke(Color.white, lineWidth: 1.5)
+                
+                // Hands calculations
+                let calendar = Calendar.current
+                let components = calendar.dateComponents([.hour, .minute, .second], from: currentDate)
+                let hour = CGFloat(components.hour ?? 0)
+                let minute = CGFloat(components.minute ?? 0)
+                let second = CGFloat(components.second ?? 0)
+                
+                let hourAngle = (hour * 30.0) + (minute * 0.5)
+                let minuteAngle = (minute * 6.0) + (second * 0.1)
+                let secondAngle = second * 6.0
+                
+                // Hour Hand
+                Capsule()
+                    .fill(Color.white)
+                    .frame(width: 3, height: radius * 0.5)
+                    .offset(y: -radius * 0.25)
+                    .rotationEffect(.degrees(hourAngle))
+                    .position(center)
+                
+                // Minute Hand
+                Capsule()
+                    .fill(Color.white)
+                    .frame(width: 2, height: radius * 0.75)
+                    .offset(y: -radius * 0.375)
+                    .rotationEffect(.degrees(minuteAngle))
+                    .position(center)
+                
+                // Second Hand
+                Rectangle()
+                    .fill(Color.white)
+                    .frame(width: 1, height: radius * 0.85)
+                    .offset(y: -radius * 0.425)
+                    .rotationEffect(.degrees(secondAngle))
+                    .position(center)
+            }
+        }
+        .background(Color.black)
+        .onReceive(timer) { input in
+            currentDate = input
+        }
+    }
+}
+
+struct BinaryClockPreviewView: View {
+    @State private var currentDate = Date()
+    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            let spacingX = w / 7
+            let spacingY = h / 6
+            
+            let calendar = Calendar.current
+            let components = calendar.dateComponents([.hour, .minute, .second], from: currentDate)
+            let hour = components.hour ?? 0
+            let minute = components.minute ?? 0
+            let second = components.second ?? 0
+            
+            let hrTens = hour / 10
+            let hrOnes = hour % 10
+            let minTens = minute / 10
+            let minOnes = minute % 10
+            let secTens = second / 10
+            let secOnes = second % 10
+            
+            HStack(spacing: spacingX * 0.8) {
+                Spacer(minLength: 0)
+                BinaryColumn(val: hrTens, rows: 2, spacing: spacingY * 0.7)
+                BinaryColumn(val: hrOnes, rows: 4, spacing: spacingY * 0.7)
+                BinaryColumn(val: minTens, rows: 3, spacing: spacingY * 0.7)
+                BinaryColumn(val: minOnes, rows: 4, spacing: spacingY * 0.7)
+                BinaryColumn(val: secTens, rows: 3, spacing: spacingY * 0.7)
+                BinaryColumn(val: secOnes, rows: 4, spacing: spacingY * 0.7)
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.black)
+        }
+        .background(Color.black)
+        .onReceive(timer) { input in
+            currentDate = input
+        }
+    }
+}
+
+struct BinaryColumn: View {
+    let val: Int
+    let rows: Int
+    let spacing: CGFloat
+    
+    var body: some View {
+        VStack(spacing: spacing) {
+            ForEach((0..<rows).reversed(), id: \.self) { row in
+                let bit = (val >> row) & 1
+                Circle()
+                    .stroke(Color.white, lineWidth: 1)
+                    .background(Circle().fill(bit == 1 ? Color.white : Color.clear))
+                    .frame(width: 6, height: 6)
+            }
+        }
+    }
+}
+
 struct ClockPreviewContainer: View {
     let style: Int
     let timeString: String
     
     var body: some View {
         ZStack {
-            GifImageView(gifName: gifName, fallbackSystemName: "clock")
-                .frame(width: 140, height: 100)
-            
             if style == 0 {
-                // Retro Digital Dot-Matrix Simulated overlay
-                Text(timeString)
-                    .font(.system(size: 38, weight: .bold, design: .monospaced))
-                    .foregroundColor(.white)
-                    .tracking(2)
-                    .shadow(color: .black, radius: 4)
+                RetroClockPreviewView()
+                    .frame(width: 140, height: 100)
+            } else if style == 1 {
+                AnalogClockPreviewView()
+                    .frame(width: 140, height: 100)
+            } else if style == 2 {
+                BinaryClockPreviewView()
+                    .frame(width: 140, height: 100)
             }
-        }
-    }
-    
-    private var gifName: String {
-        switch style {
-        case 0: return "retro_clock"
-        case 1: return "analog_clock"
-        case 2: return "binary_clock"
-        default: return "retro_clock"
         }
     }
 }
@@ -558,8 +755,21 @@ struct CarouselCard: View {
                                 .fill(Color.white.opacity(0.01))
                         )
                     
-                    GifImageView(gifName: gifName, fallbackSystemName: fallbackIcon)
-                        .frame(width: 80, height: 80)
+                    if title == "Retro" {
+                        RetroClockPreviewView()
+                            .frame(width: 70, height: 70)
+                            .scaleEffect(0.8)
+                    } else if title == "Analog" {
+                        AnalogClockPreviewView()
+                            .frame(width: 70, height: 70)
+                    } else if title == "Binary" {
+                        BinaryClockPreviewView()
+                            .frame(width: 70, height: 70)
+                            .scaleEffect(0.8)
+                    } else {
+                        GifImageView(gifName: gifName, fallbackSystemName: fallbackIcon)
+                            .frame(width: 80, height: 80)
+                    }
                 }
                 
                 Text(title.uppercased())
