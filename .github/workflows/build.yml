@@ -16,6 +16,9 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      - name: Create Secrets File
+        run: cp ios/Secrets.swift.example ios/Secrets.swift
+
       - name: Generate Xcode Project
         run: xcodegen generate
 

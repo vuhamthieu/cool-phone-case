@@ -3,3 +3,5 @@
 /.ext_ide/
 .data
 **/.DS_Store
+include/secrets.h
+ios/Secrets.swift

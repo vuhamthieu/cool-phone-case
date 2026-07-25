@@ -25,8 +25,8 @@ struct CameraStreamView: View {
                     .foregroundColor(.gray)
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("• SSID: MochiCase_AP")
-                    Text("• PASSWORD: mochicase123")
+                    Text("• SSID: \(Secrets.apSSID)")
+                    Text("• PASSWORD: \(Secrets.apPassword)")
                     Text("• CASE IP: 192.168.4.1 (PORT 5001)")
                 }
                 .font(.system(size: 11, design: .monospaced))

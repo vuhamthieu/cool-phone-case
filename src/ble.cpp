@@ -64,7 +64,7 @@ class TimeCallback: public NimBLECharacteristicCallbacks {
 static NimBLECharacteristic* pBatteryLevelChar = nullptr;
 
 void bleInit() {
-    NimBLEDevice::init("Mochi_Case");
+    NimBLEDevice::init("OverByte");
     
     NimBLEServer *pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(new ServerCallbacks());
@@ -105,7 +105,7 @@ void bleInit() {
     pAdvertising->setScanResponse(true);
     pAdvertising->start();
     
-    Serial.println("BLE Initialized. Advertising: Mochi_Case (Control & Battery)");
+    Serial.println("BLE Initialized. Advertising: OverByte (Control & Battery)");
 }
 
 bool bleIsConnected() {

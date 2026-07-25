@@ -34,7 +34,7 @@ void Task2_General(void* pvParameters);
 void setup() {
     Serial.begin(115200);
     delay(1000);
-    Serial.println("--- Starting Mochi Second Screen Phone Case ---");
+    Serial.println("--- Starting OverByte Second Screen Phone Case ---");
     
     // Configure inputs
     pinMode(PIN_BAT_ADC, ANALOG);
@@ -54,7 +54,7 @@ void setup() {
     // Show splash screen on boot
     if (xSemaphoreTake(displayMutex, portMAX_DELAY) == pdTRUE) {
         displayClear();
-        drawTextCentered(20, "MOCHI CASE");
+        drawTextCentered(20, "OVERBYTE");
         drawTextCentered(35, "V1.0.0");
         drawTextCentered(50, "Waiting for BLE...");
         displayUpdate();

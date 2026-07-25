@@ -652,6 +652,7 @@ struct WebViewGifRepresentable: UIViewRepresentable {
         webView.isUserInteractionEnabled = false
         webView.scrollView.isScrollEnabled = false
         webView.scrollView.bounces = false
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.backgroundColor = .clear
         webView.scrollView.backgroundColor = .clear
         webView.isOpaque = false
@@ -660,39 +661,8 @@ struct WebViewGifRepresentable: UIViewRepresentable {
     
     func updateUIView(_ uiView: WKWebView, context: Context) {
         if let url = Bundle.main.url(forResource: gifName, withExtension: "gif") {
-            do {
-                let data = try Data(contentsOf: url)
-                let html = """
-                <html>
-                <head>
-                <style>
-                html, body {
-                    margin: 0;
-                    padding: 0;
-                    width: 100%;
-                    height: 100%;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    background-color: black;
-                }
-                img {
-                    max-width: 100%;
-                    max-height: 100%;
-                    object-fit: contain;
-                    image-rendering: pixelated;
-                }
-                </style>
-                </head>
-                <body>
-                <img src="data:image/gif;base64,\(data.base64EncodedString())" />
-                </body>
-                </html>
-                """
-                uiView.loadHTMLString(html, baseURL: nil)
-            } catch {
-                print("Error loading GIF data: \(error)")
-            }
+            let html = "<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'><style>html, body { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; display: flex; justify-content: center; align-items: center; background-color: black; } img { max-width: 100%; max-height: 100%; object-fit: contain; }</style></head><body><img src='\(url.absoluteString)'></body></html>"
+            uiView.loadHTMLString(html, baseURL: Bundle.main.bundleURL)
         }
     }
     

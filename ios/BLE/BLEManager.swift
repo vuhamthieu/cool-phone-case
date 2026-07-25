@@ -34,7 +34,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     
     func startScanning() {
         guard centralManager.state == .poweredOn else { return }
-        connectionStatusText = "Scanning for Mochi Case..."
+        connectionStatusText = "Scanning for OverByte..."
         discoveredPeripherals.removeAll()
         centralManager.scanForPeripherals(withServices: [Self.serviceUUID], options: nil)
     }
@@ -98,8 +98,8 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String : Any], rssi RSSI: NSNumber) {
         if !discoveredPeripherals.contains(peripheral) {
             discoveredPeripherals.append(peripheral)
-            // Auto connect to Mochi_Case if found
-            if peripheral.name == "Mochi_Case" {
+            // Auto connect to OverByte if found
+            if peripheral.name == "OverByte" {
                 connect(to: peripheral)
             }
         }
