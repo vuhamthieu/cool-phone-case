@@ -3,7 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var bleManager: BLEManager
     
-    // Track local segmented control index
+    // Track local segmented control index (0: Clock, 1: Emote, 2: Camera)
     @State private var selectedMode = 0
     @State private var lastSyncedTimeText = "Never"
     
@@ -14,85 +14,91 @@ struct ContentView: View {
                 Color.black.ignoresSafeArea()
                 
                 ScrollView {
-                    VStack(spacing: 24) {
+                    VStack(spacing: 28) {
                         
-                        // --- HEADER BAR ---
-                        VStack(spacing: 4) {
-                            Text("MOCHI SECOND SCREEN")
-                                .font(.system(size: 12, weight: .bold, design: .monospaced))
-                                .foregroundColor(.gray)
-                            Text("CASE DASHBOARD")
-                                .font(.system(size: 24, weight: .bold, design: .monospaced))
+                        // --- HEADER / HERO SECTION ---
+                        VStack(spacing: 12) {
+                            Text("OVERBYTE")
+                                .font(.system(size: 28, weight: .black, design: .monospaced))
                                 .foregroundColor(.white)
-                        }
-                        .padding(.top, 16)
-                        
-                        // --- CONNECTION CARD ---
-                        VStack(spacing: 16) {
-                            HStack {
-                                Circle()
-                                    .fill(bleManager.isConnected ? Color.white : Color.red)
-                                    .frame(width: 8, height: 8)
-                                    .shadow(color: bleManager.isConnected ? .white : .red, radius: 4)
-                                
-                                Text(bleManager.connectionStatusText.uppercased())
-                                    .font(.system(size: 13, weight: .bold, design: .monospaced))
-                                    .foregroundColor(.white)
-                                
-                                Spacer()
+                                .tracking(2)
+                            
+                            // Connection status pill & battery level pill
+                            HStack(spacing: 12) {
+                                HStack(spacing: 6) {
+                                    Circle()
+                                        .fill(bleManager.isConnected ? Color.green : Color.red)
+                                        .frame(width: 6, height: 6)
+                                    Text(bleManager.connectionStatusText.uppercased())
+                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                        .foregroundColor(bleManager.isConnected ? .green : .red)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color.white.opacity(0.05))
+                                .cornerRadius(20)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 20)
+                                        .stroke(bleManager.isConnected ? Color.green.opacity(0.4) : Color.red.opacity(0.4), lineWidth: 1)
+                                )
                                 
                                 if bleManager.isConnected {
-                                    HStack(spacing: 12) {
-                                        BatteryIndicatorView(level: bleManager.batteryLevel)
-                                        
-                                        Button(action: {
-                                            bleManager.disconnect()
-                                        }) {
-                                            Text("DISCONNECT")
-                                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                                .foregroundColor(.red)
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 6)
-                                                .background(Color.red.opacity(0.1))
-                                                .cornerRadius(8)
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: 8)
-                                                        .stroke(Color.red.opacity(0.5), lineWidth: 1)
-                                                )
-                                        }
-                                    }
-                                } else {
-                                    Button(action: {
-                                        bleManager.startScanning()
-                                    }) {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "arrow.clockwise")
-                                                .font(.system(size: 10, weight: .bold))
-                                            Text("SCAN")
-                                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                        }
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 6)
-                                        .background(Color.white.opacity(0.05))
-                                        .cornerRadius(8)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 8)
-                                                .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                                        )
-                                    }
+                                    BatteryIndicatorView(level: bleManager.batteryLevel)
                                 }
                             }
                             
-                            // Discovered devices list when searching
-                            if !bleManager.isConnected && !bleManager.discoveredPeripherals.isEmpty {
-                                Divider().background(Color.gray.opacity(0.3))
+                            // Disconnect/Scan capsule button
+                            if bleManager.isConnected {
+                                Button(action: {
+                                    bleManager.disconnect()
+                                }) {
+                                    Text("DISCONNECT")
+                                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                        .foregroundColor(.red)
+                                        .padding(.horizontal, 24)
+                                        .padding(.vertical, 10)
+                                        .background(Color.black)
+                                        .cornerRadius(20)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 20)
+                                                .stroke(Color.red, lineWidth: 1)
+                                        )
+                                }
+                                .padding(.top, 4)
+                            } else {
+                                Button(action: {
+                                    bleManager.startScanning()
+                                }) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "arrow.clockwise")
+                                            .font(.system(size: 11, weight: .bold))
+                                        Text("SCAN DEVICE")
+                                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    }
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 24)
+                                    .padding(.vertical, 10)
+                                    .background(Color.black)
+                                    .cornerRadius(20)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 20)
+                                            .stroke(Color.white, lineWidth: 1)
+                                    )
+                                }
+                                .padding(.top, 4)
+                            }
+                        }
+                        .padding(.top, 16)
+                        
+                        // --- DISCOVERED DEVICES LIST (SCANNING) ---
+                        if !bleManager.isConnected && !bleManager.discoveredPeripherals.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("DISCOVERED DEVICES")
+                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.gray)
+                                    .padding(.horizontal, 4)
                                 
-                                VStack(alignment: .leading, spacing: 10) {
-                                    Text("DISCOVERED DEVICES:")
-                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                        .foregroundColor(.gray)
-                                    
+                                VStack(spacing: 8) {
                                     ForEach(bleManager.discoveredPeripherals, id: \.identifier) { device in
                                         Button(action: {
                                             bleManager.connect(to: device)
@@ -100,155 +106,167 @@ struct ContentView: View {
                                             HStack {
                                                 Image(systemName: "candybarphone")
                                                     .foregroundColor(.white)
-                                                    .font(.system(size: 14))
                                                 Text((device.name ?? "UNKNOWN DEVICE").uppercased())
                                                     .foregroundColor(.white)
                                                     .font(.system(size: 12, weight: .bold, design: .monospaced))
                                                 Spacer()
                                                 Image(systemName: "chevron.right")
                                                     .foregroundColor(.white)
-                                                    .font(.system(size: 12))
                                             }
-                                            .padding(12)
-                                            .background(Color.white.opacity(0.04))
-                                            .cornerRadius(8)
+                                            .padding(14)
+                                            .background(Color.white.opacity(0.02))
+                                            .cornerRadius(12)
                                             .overlay(
-                                                RoundedRectangle(cornerRadius: 8)
+                                                RoundedRectangle(cornerRadius: 12)
                                                     .stroke(Color.white.opacity(0.15), lineWidth: 1)
                                             )
                                         }
                                     }
                                 }
                             }
-                        }
-                        .padding(18)
-                        .background(Color.white.opacity(0.02))
-                        .cornerRadius(16)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16)
-                                .stroke(Color.gray.opacity(0.25), lineWidth: 1.5)
-                        )
-                        
-                        // --- MODE SELECTOR CARD (MODERNIZED) ---
-                        VStack(alignment: .leading, spacing: 14) {
-                            Text("SELECT MAIN MODE")
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundColor(.gray)
-                                .padding(.horizontal, 4)
-                            
-                            ModernSegmentedControl(
-                                selectedIndex: $selectedMode,
-                                options: ["Clock", "Mochi", "Camera"],
-                                isEnabled: bleManager.isConnected,
-                                onChange: { newValue in
-                                    bleManager.sendMode(UInt8(newValue))
-                                }
+                            .padding(18)
+                            .background(Color.black)
+                            .cornerRadius(16)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(Color.white, lineWidth: 1)
                             )
-                            
-                            if !bleManager.isConnected {
-                                Text("Connect to your Mochi case via Bluetooth to switch modes.")
-                                    .font(.system(size: 11, design: .monospaced))
+                        }
+                        
+                        // --- MODE NAVIGATION ---
+                        HStack(spacing: 12) {
+                            ModePillButton(title: "Clock", index: 0, selectedIndex: $selectedMode, isEnabled: bleManager.isConnected) {
+                                bleManager.sendMode(0)
+                            }
+                            ModePillButton(title: "Emote", index: 1, selectedIndex: $selectedMode, isEnabled: bleManager.isConnected) {
+                                bleManager.sendMode(1)
+                            }
+                            ModePillButton(title: "Camera", index: 2, selectedIndex: $selectedMode, isEnabled: bleManager.isConnected) {
+                                bleManager.sendMode(2)
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .opacity(bleManager.isConnected ? 1.0 : 0.5)
+                        
+                        // --- ACTIONS / UTILITIES (BY ACTIVE MODE) ---
+                        if !bleManager.isConnected {
+                            VStack(spacing: 12) {
+                                Image(systemName: "bolt.horizontal.circle")
+                                    .font(.system(size: 32))
                                     .foregroundColor(.red)
-                                    .padding(.top, 4)
-                                    .padding(.horizontal, 4)
-                            }
-                        }
-                        .padding(18)
-                        .background(Color.white.opacity(0.02))
-                        .cornerRadius(16)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16)
-                                .stroke(Color.gray.opacity(0.25), lineWidth: 1.5)
-                        )
-                        
-                        // --- ACTIONS / UTILITIES ---
-                        if selectedMode == 0 && bleManager.isConnected {
-                            // Clock Face controls
-                            VStack(alignment: .leading, spacing: 16) {
-                                Text("MY WATCH FACES")
-                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                Text("DEVICE DISCONNECTED")
+                                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.white)
+                                Text("Please connect to your OVERBYTE case via Bluetooth to access controls.")
+                                    .font(.system(size: 11, design: .monospaced))
                                     .foregroundColor(.gray)
-                                    .padding(.horizontal, 4)
-                                
-                                ScrollView(.horizontal, showsIndicators: false) {
-                                    HStack(spacing: 16) {
-                                        WatchFaceCard(name: "Retro Digital", symbol: "clock")
-                                        WatchFaceCard(name: "Analog", symbol: "dial.low")
-                                        WatchFaceCard(name: "Binary", symbol: "timer")
-                                    }
-                                    .padding(.vertical, 4)
-                                }
-                                
-                                Button(action: {
-                                    bleManager.syncTime()
-                                    let formatter = DateFormatter()
-                                    formatter.timeStyle = .medium
-                                    lastSyncedTimeText = formatter.string(from: Date())
-                                }) {
-                                    HStack {
-                                        Image(systemName: "clock.arrow.2.circlepath")
-                                        Text("SYNC TIME WITH IPHONE")
-                                            .font(.system(size: 12, weight: .bold, design: .monospaced))
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(Color.white)
-                                    .foregroundColor(.black)
-                                    .cornerRadius(12)
-                                }
-                                
-                                HStack {
-                                    Spacer()
-                                    Text("LAST SYNCED:")
-                                        .font(.system(size: 10, design: .monospaced))
-                                        .foregroundColor(.gray)
-                                    Text(lastSyncedTimeText.uppercased())
-                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                        .foregroundColor(.white)
-                                    Spacer()
-                                }
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 16)
                             }
-                            .padding(18)
-                            .background(Color.white.opacity(0.02))
+                            .padding(.vertical, 40)
+                            .frame(maxWidth: .infinity)
+                            .background(Color.white.opacity(0.01))
                             .cornerRadius(16)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Color.gray.opacity(0.25), lineWidth: 1.5)
+                                    .stroke(Color.red.opacity(0.3), lineWidth: 1)
                             )
-                        } else if selectedMode == 1 && bleManager.isConnected {
-                            // Mochi Visual Emotion Grid
-                            VStack(alignment: .leading, spacing: 16) {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text("MOCHI EMOTION GUIDE")
-                                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        } else {
+                            if selectedMode == 0 {
+                                // CLOCK SECTION
+                                VStack(alignment: .leading, spacing: 20) {
+                                    Text("WATCH FACES")
+                                        .font(.system(size: 12, weight: .bold, design: .monospaced))
                                         .foregroundColor(.gray)
-                                    Text("Interact with the capacitive touch sensor on the case to trigger these expressions:")
-                                        .font(.system(size: 11, design: .monospaced))
-                                        .foregroundColor(.gray)
+                                        .padding(.horizontal, 4)
+                                    
+                                    ScrollView(.horizontal, showsIndicators: false) {
+                                        HStack(spacing: 16) {
+                                            WatchFaceCard(name: "Retro", imageName: "placeholder")
+                                            WatchFaceCard(name: "Binary", imageName: "placeholder")
+                                            WatchFaceCard(name: "Analog", imageName: "placeholder")
+                                        }
+                                        .padding(.horizontal, 4)
+                                        .padding(.vertical, 4)
+                                    }
+                                    
+                                    // Sync Time Card
+                                    Button(action: {
+                                        bleManager.syncTime()
+                                        let formatter = DateFormatter()
+                                        formatter.timeStyle = .medium
+                                        lastSyncedTimeText = formatter.string(from: Date())
+                                    }) {
+                                        VStack(spacing: 10) {
+                                            HStack {
+                                                Image(systemName: "clock.arrow.2.circlepath")
+                                                    .font(.system(size: 16))
+                                                Text("SYNC TIME WITH IPHONE")
+                                                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                                            }
+                                            .foregroundColor(.white)
+                                            
+                                            HStack {
+                                                Text("LAST SYNCED:")
+                                                    .font(.system(size: 10, design: .monospaced))
+                                                    .foregroundColor(.gray)
+                                                Text(lastSyncedTimeText.uppercased())
+                                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                                    .foregroundColor(.white)
+                                            }
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 18)
+                                        .background(Color.black)
+                                        .cornerRadius(16)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 16)
+                                                .stroke(Color.white, lineWidth: 1)
+                                        )
+                                    }
                                 }
-                                .padding(.horizontal, 4)
-                                
-                                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-                                    MochiEmotionCard(name: "Idle", symbol: "face.smiling", gesture: "Default Face")
-                                    MochiEmotionCard(name: "What", symbol: "questionmark.circle", gesture: "1 Tap")
-                                    MochiEmotionCard(name: "Judging", symbol: "eye.circle", gesture: "2+ Taps")
-                                    MochiEmotionCard(name: "Happy", symbol: "face.smiling.fill", gesture: "Rub/Hold")
-                                    MochiEmotionCard(name: "Angry", symbol: "flame.fill", gesture: "Rub > 15s")
+                            } else if selectedMode == 1 {
+                                // EMOTE SECTION
+                                VStack(alignment: .leading, spacing: 20) {
+                                    Text("EMOTE GALLERY")
+                                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                                        .foregroundColor(.gray)
+                                        .padding(.horizontal, 4)
+                                    
+                                    ScrollView(.horizontal, showsIndicators: false) {
+                                        HStack(spacing: 16) {
+                                            EmoteCard(name: "Idle", imageName: "placeholder", gesture: "Default Face")
+                                            EmoteCard(name: "What", imageName: "placeholder", gesture: "1 Tap")
+                                            EmoteCard(name: "Judging", imageName: "placeholder", gesture: "2+ Taps")
+                                            EmoteCard(name: "Happy", imageName: "placeholder", gesture: "Rub/Hold")
+                                            EmoteCard(name: "Angry", imageName: "placeholder", gesture: "Rub > 15s")
+                                        }
+                                        .padding(.horizontal, 4)
+                                        .padding(.vertical, 4)
+                                    }
+                                }
+                            } else if selectedMode == 2 {
+                                // CAMERA STREAM SECTION
+                                VStack(alignment: .leading, spacing: 20) {
+                                    Text("CAMERA STREAM")
+                                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                                        .foregroundColor(.gray)
+                                        .padding(.horizontal, 4)
+                                    
+                                    CameraStreamView()
+                                        .padding(8)
+                                        .background(Color.black)
+                                        .cornerRadius(16)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 16)
+                                                .stroke(Color.white, lineWidth: 1)
+                                        )
                                 }
                             }
-                            .padding(18)
-                            .background(Color.white.opacity(0.02))
-                            .cornerRadius(16)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Color.gray.opacity(0.25), lineWidth: 1.5)
-                            )
-                        } else if selectedMode == 2 && bleManager.isConnected {
-                            // Camera Streaming View!
-                            CameraStreamView()
                         }
                     }
                     .padding(.horizontal, 16)
+                    .padding(.bottom, 24)
                 }
             }
             .navigationBarHidden(true)
@@ -256,118 +274,97 @@ struct ContentView: View {
     }
 }
 
-struct ModernSegmentedControl: View {
+struct ModePillButton: View {
+    let title: String
+    let index: Int
     @Binding var selectedIndex: Int
-    let options: [String]
     let isEnabled: Bool
-    let onChange: (Int) -> Void
+    let action: () -> Void
     
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(0..<options.count, id: \.self) { index in
-                Button(action: {
-                    if isEnabled {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            selectedIndex = index
-                        }
-                        onChange(index)
-                    }
-                }) {
-                    Text(options[index].uppercased())
-                        .font(.system(size: 12, weight: .bold, design: .monospaced))
-                        .foregroundColor(selectedIndex == index ? .black : (isEnabled ? .white : .gray))
-                        .padding(.vertical, 10)
-                        .frame(maxWidth: .infinity)
-                        .background(
-                            ZStack {
-                                if selectedIndex == index {
-                                    Color.white
-                                        .cornerRadius(8)
-                                } else {
-                                    Color.clear
-                                }
-                            }
-                        )
+        Button(action: {
+            if isEnabled {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    selectedIndex = index
                 }
+                action()
             }
+        }) {
+            Text(title.uppercased())
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .foregroundColor(selectedIndex == index ? .black : .white)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity)
+                .background(selectedIndex == index ? Color.white : Color.black)
+                .cornerRadius(20)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(selectedIndex == index ? Color.clear : Color.white, lineWidth: 1)
+                )
         }
-        .padding(4)
-        .background(Color.white.opacity(0.06))
-        .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-        )
-        .opacity(isEnabled ? 1.0 : 0.5)
+        .disabled(!isEnabled)
     }
 }
 
 struct WatchFaceCard: View {
     let name: String
-    let symbol: String
+    let imageName: String
     
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 12) {
             ZStack {
-                Circle()
-                    .fill(Color.white.opacity(0.04))
-                    .frame(width: 80, height: 80)
-                    .overlay(
-                        Circle()
-                            .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                    )
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.white, lineWidth: 1)
+                    .frame(width: 140, height: 140)
+                    .background(Color.white.opacity(0.02))
+                    .cornerRadius(16)
                 
-                Image(systemName: symbol)
-                    .font(.system(size: 30))
+                Image(imageName)
+                    .interpolation(.none)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 100, height: 100)
                     .foregroundColor(.white)
             }
             
             Text(name.uppercased())
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
                 .foregroundColor(.white)
         }
-        .frame(width: 100)
     }
 }
 
-struct MochiEmotionCard: View {
+struct EmoteCard: View {
     let name: String
-    let symbol: String
+    let imageName: String
     let gesture: String
     
     var body: some View {
         VStack(spacing: 12) {
             ZStack {
-                Circle()
-                    .fill(Color.white.opacity(0.04))
-                    .frame(width: 48, height: 48)
-                    .overlay(
-                        Circle()
-                            .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                    )
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.white, lineWidth: 1)
+                    .frame(width: 140, height: 140)
+                    .background(Color.white.opacity(0.02))
+                    .cornerRadius(16)
                 
-                Image(systemName: symbol)
-                    .font(.system(size: 20))
+                Image(imageName)
+                    .interpolation(.none)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 100, height: 100)
                     .foregroundColor(.white)
             }
             
             VStack(spacing: 2) {
                 Text(name.uppercased())
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
                     .foregroundColor(.white)
                 Text(gesture.uppercased())
                     .font(.system(size: 9, design: .monospaced))
                     .foregroundColor(.gray)
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .background(Color.white.opacity(0.02))
-        .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-        )
     }
 }
 
@@ -378,20 +375,22 @@ struct BatteryIndicatorView: View {
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: batteryIconName)
-                .font(.system(size: 11, weight: .bold))
+                .font(.system(size: 10, weight: .bold))
                 .foregroundColor(batteryColor)
                 .scaleEffect(level <= 30 && isPulsing ? 1.15 : 1.0)
                 .opacity(level <= 30 && isPulsing ? 0.4 : 1.0)
             
             Text("\(level)%")
-                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .foregroundColor(batteryColor)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.white.opacity(0.05))
+        .cornerRadius(20)
         .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .stroke(batteryColor, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(batteryColor.opacity(0.4), lineWidth: 1)
         )
         .onAppear {
             if level <= 30 {
