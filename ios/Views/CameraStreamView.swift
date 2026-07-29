@@ -3,8 +3,8 @@ import SwiftUI
 import AVFoundation
 
 struct CameraStreamView: View {
-    @StateObject private var cameraManager = CameraManager()
-    @StateObject private var udpStreamer = UDPStreamer()
+    @ObservedObject var cameraManager: CameraManager
+    @ObservedObject var udpStreamer: UDPStreamer
     
     var body: some View {
         VStack(spacing: 16) {
@@ -110,21 +110,6 @@ struct CameraStreamView: View {
                 Rectangle()
                     .stroke(Color.white, lineWidth: 1.5)
             )
-        }
-        .onAppear {
-            // Bind camera output buffer to the UDP streamer callback
-            cameraManager.onFrameCaptured = { pixelBuffer in
-                udpStreamer.streamFrame(pixelBuffer)
-            }
-            
-            // Start services
-            udpStreamer.start()
-            cameraManager.start()
-        }
-        .onDisappear {
-            // Tear down services
-            cameraManager.stop()
-            udpStreamer.stop()
         }
     }
 }

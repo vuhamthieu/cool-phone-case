@@ -18,8 +18,12 @@ struct ContentView: View {
     // Core customization states
     @State private var selectedClockStyle = 1 // 1: Analog default
     @State private var selectedEmote = 0      // 0: Idle, 1: What, 2: Judging, 3: Happy, 4: Angry
-    @State private var selectedFilter = 0     // 0: Normal, 1: Mono, 2: Negative, 3: Posterize
     @State private var lastSyncedTimeText = "Never"
+    
+    // Persistent streaming manager
+    @StateObject private var cameraManager = CameraManager()
+    @StateObject private var udpStreamer = UDPStreamer()
+    @State private var isCameraStreaming = false
     
     var body: some View {
         NavigationView {
@@ -35,7 +39,7 @@ struct ContentView: View {
                         case .faces:
                             FacesView(activeScreen: $activeScreen, selectedClockStyle: $selectedClockStyle, selectedEmote: $selectedEmote)
                         case .videoStream:
-                            CameraView(activeScreen: $activeScreen, selectedFilter: $selectedFilter)
+                            CameraView(activeScreen: $activeScreen, isCameraStreaming: $isCameraStreaming, cameraManager: cameraManager, udpStreamer: udpStreamer)
                         case .tiles:
                             TilesView(activeScreen: $activeScreen)
                         case .settings:
@@ -52,6 +56,18 @@ struct ContentView: View {
             }
             .navigationBarHidden(true)
         }
+        .onChange(of: isCameraStreaming) { streaming in
+            if streaming {
+                cameraManager.onFrameCaptured = { pixelBuffer in
+                    udpStreamer.streamFrame(pixelBuffer)
+                }
+                udpStreamer.start()
+                cameraManager.start()
+            } else {
+                cameraManager.stop()
+                udpStreamer.stop()
+            }
+        }
     }
 }
 
@@ -66,7 +82,7 @@ struct HomeView: View {
     
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: 20) {
+            VStack(spacing: 24) {
                 // Header Bar
                 HStack(spacing: 0) {
                     Text("OVER")
@@ -76,44 +92,34 @@ struct HomeView: View {
                     Text("YTE")
                         .foregroundColor(.white)
                 }
-                .font(.system(size: 28, weight: .black, design: .monospaced))
+                .font(.system(size: 32, weight: .black, design: .monospaced))
                 .padding(.top, 24)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 
                 // Status description
                 HStack {
-                    Text(bleManager.isConnected ? "Your watch is connected to OverByte." : "Your watch isn't connected to your phone.")
-                        .font(.system(size: 13, weight: .bold, design: .monospaced))
-                        .foregroundColor(.gray)
+                    Text(bleManager.isConnected ? "CONNECTED" : "DISCONNECTED")
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
+                        .foregroundColor(bleManager.isConnected ? .blue : .red)
                     Spacer()
                 }
                 
                 // CONNECT/DISCONNECT button
                 HStack {
-                    if bleManager.isConnected {
-                        Button(action: {
+                    Button(action: {
+                        if bleManager.isConnected {
                             bleManager.disconnect()
-                        }) {
-                            Text("DISCONNECT")
-                                .font(.system(size: 14, weight: .black, design: .monospaced))
-                                .foregroundColor(.white)
-                                .padding(.vertical, 14)
-                                .padding(.horizontal, 40)
-                                .background(Color.red.opacity(0.85))
-                                .cornerRadius(24)
-                        }
-                    } else {
-                        Button(action: {
+                        } else {
                             bleManager.startScanning()
-                        }) {
-                            Text("CONNECT")
-                                .font(.system(size: 14, weight: .black, design: .monospaced))
-                                .foregroundColor(.white)
-                                .padding(.vertical, 14)
-                                .padding(.horizontal, 40)
-                                .background(Color(red: 31/255, green: 105/255, blue: 255/255))
-                                .cornerRadius(24)
                         }
+                    }) {
+                        Text(bleManager.isConnected ? "DISCONNECT" : "CONNECT")
+                            .font(.system(size: 13, weight: .bold, design: .monospaced))
+                            .foregroundColor(.black)
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 32)
+                            .background(bleManager.isConnected ? Color.red : Color(red: 31/255, green: 105/255, blue: 255/255))
+                            .border(Color.white, width: 2)
                     }
                     Spacer()
                 }
@@ -123,7 +129,7 @@ struct HomeView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("DISCOVERED DEVIATION:")
                             .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundColor(.gray)
+                            .foregroundColor(.white)
                         
                         ForEach(bleManager.discoveredPeripherals, id: \.identifier) { device in
                             Button(action: {
@@ -138,26 +144,12 @@ struct HomeView: View {
                                 }
                                 .foregroundColor(.white)
                                 .padding(12)
-                                .background(Color.white.opacity(0.04))
-                                .cornerRadius(8)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                                )
+                                .border(Color.white.opacity(0.3), width: 1.5)
                             }
                         }
                     }
                     .padding(.top, 8)
                 }
-                
-                // Search icon
-                HStack {
-                    Spacer()
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(.white)
-                }
-                .padding(.top, 8)
                 
                 // Options Box 1: Faces, Video Stream, Tiles
                 HStack(spacing: 0) {
@@ -169,7 +161,7 @@ struct HomeView: View {
                         VStack(spacing: 12) {
                             RobotFaceIcon()
                             Text("FACES")
-                                .font(.system(size: 11, weight: .black, design: .monospaced))
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
                                 .foregroundColor(.white)
                         }
                         .frame(maxWidth: .infinity)
@@ -177,8 +169,8 @@ struct HomeView: View {
                     }
                     
                     Rectangle()
-                        .fill(Color.white.opacity(0.15))
-                        .frame(width: 1.5)
+                        .fill(Color.white)
+                        .frame(width: 2)
                         .padding(.vertical, 8)
                     
                     Button(action: {
@@ -189,7 +181,7 @@ struct HomeView: View {
                         VStack(spacing: 12) {
                             CameraIcon()
                             Text("VIDEO STREAM")
-                                .font(.system(size: 11, weight: .black, design: .monospaced))
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
                                 .foregroundColor(.white)
                         }
                         .frame(maxWidth: .infinity)
@@ -197,8 +189,8 @@ struct HomeView: View {
                     }
                     
                     Rectangle()
-                        .fill(Color.white.opacity(0.15))
-                        .frame(width: 1.5)
+                        .fill(Color.white)
+                        .frame(width: 2)
                         .padding(.vertical, 8)
                     
                     Button(action: {
@@ -209,7 +201,7 @@ struct HomeView: View {
                         VStack(spacing: 12) {
                             TilesIcon()
                             Text("TILES")
-                                .font(.system(size: 11, weight: .black, design: .monospaced))
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
                                 .foregroundColor(.white)
                         }
                         .frame(maxWidth: .infinity)
@@ -218,11 +210,7 @@ struct HomeView: View {
                 }
                 .padding(.vertical, 20)
                 .background(Color.black)
-                .cornerRadius(16)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white.opacity(0.18), lineWidth: 1.5)
-                )
+                .border(Color.white, width: 2)
                 
                 // Options Box 2: Setting, Tips and User Guide, Store
                 VStack(spacing: 0) {
@@ -236,10 +224,10 @@ struct HomeView: View {
                             GearIcon()
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("SETTING")
-                                    .font(.system(size: 14, weight: .black, design: .monospaced))
+                                    .font(.system(size: 13, weight: .bold, design: .monospaced))
                                     .foregroundColor(.white)
                                 Text("NOTIFICATIONS • DISPLAY • HEALTH")
-                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                    .font(.system(size: 9, weight: .bold, design: .monospaced))
                                     .foregroundColor(.gray)
                             }
                             Spacer()
@@ -249,8 +237,9 @@ struct HomeView: View {
                         .contentShape(Rectangle())
                     }
                     
-                    Divider()
-                        .background(Color.white.opacity(0.15))
+                    Rectangle()
+                        .fill(Color.white)
+                        .frame(height: 2)
                     
                     // Tips and User Guide
                     Button(action: {
@@ -261,7 +250,7 @@ struct HomeView: View {
                         HStack(spacing: 16) {
                             LightbulbIcon()
                             Text("TIPS AND USER GUIDE")
-                                .font(.system(size: 14, weight: .black, design: .monospaced))
+                                .font(.system(size: 13, weight: .bold, design: .monospaced))
                                 .foregroundColor(.white)
                             Spacer()
                         }
@@ -270,8 +259,9 @@ struct HomeView: View {
                         .contentShape(Rectangle())
                     }
                     
-                    Divider()
-                        .background(Color.white.opacity(0.15))
+                    Rectangle()
+                        .fill(Color.white)
+                        .frame(height: 2)
                     
                     // Store
                     Button(action: {
@@ -282,7 +272,7 @@ struct HomeView: View {
                         HStack(spacing: 16) {
                             BagIcon()
                             Text("STORE")
-                                .font(.system(size: 14, weight: .black, design: .monospaced))
+                                .font(.system(size: 13, weight: .bold, design: .monospaced))
                                 .foregroundColor(.white)
                             Spacer()
                         }
@@ -292,12 +282,7 @@ struct HomeView: View {
                     }
                 }
                 .background(Color.black)
-                .cornerRadius(16)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white.opacity(0.18), lineWidth: 1.5)
-                )
-                .padding(.top, 8)
+                .border(Color.white, width: 2)
                 
                 Spacer(minLength: 24)
                 
@@ -313,38 +298,9 @@ struct FacesView: View {
     @Binding var activeScreen: ActiveScreen
     @Binding var selectedClockStyle: Int
     @Binding var selectedEmote: Int
-    @State private var previewingFace = true // True = Clock Face, False = Emote
     
-    @State private var timeString = "10:34"
-    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-    
-    private var currentFaceName: String {
-        if previewingFace {
-            switch selectedClockStyle {
-            case 0: return "RETRO ACTIVE"
-            case 1: return "PREMIUM ANALOG"
-            case 2: return "ACTIVITY BINARY"
-            default: return "WATCH FACE"
-            }
-        } else {
-            switch selectedEmote {
-            case 0: return "EMOTE: IDLE"
-            case 1: return "EMOTE: WHAT"
-            case 2: return "EMOTE: JUDGING"
-            case 3: return "EMOTE: HAPPY"
-            case 4: return "EMOTE: ANGRY"
-            default: return "EMOTE"
-            }
-        }
-    }
-    
-    private var currentFaceSubtitle: String {
-        if previewingFace {
-            return "Dial   Hands   Complication"
-        } else {
-            return "Expressive   Interactive"
-        }
-    }
+    // Category tabs: 0 = CLOCK, 1 = EMOTE, 2 = ACTIVITY
+    @State private var selectedFaceCategory = 0
     
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -368,165 +324,153 @@ struct FacesView: View {
                 }
                 .padding(.top, 16)
                 
-                // Live preview and description section (Image 2 top layout)
-                HStack(alignment: .center, spacing: 20) {
-                    // Watch preview circle
-                    ZStack {
-                        Circle()
-                            .stroke(Color.white, lineWidth: 2)
-                            .frame(width: 100, height: 100)
-                            .background(Circle().fill(Color.black))
-                        
-                        if previewingFace {
-                            ClockPreviewContainer(style: selectedClockStyle, timeString: timeString)
-                                .scaleEffect(0.7)
-                        } else {
-                            EmotePreviewContainer(emotionIndex: selectedEmote)
-                                .scaleEffect(0.6)
-                        }
-                    }
+                // Live OLED Preview Frame (Aspect ratio 2:1, strict 8-bit black & white)
+                ZStack {
+                    Color.black
                     
-                    // Description details
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(currentFaceName)
-                            .font(.system(size: 18, weight: .black, design: .monospaced))
-                            .foregroundColor(.white)
-                        
-                        Text(currentFaceSubtitle)
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundColor(.gray)
-                        
-                        Button(action: {
-                            if bleManager.isConnected {
-                                bleManager.syncTime()
-                            }
-                        }) {
-                            Text("CUSTOMIZE")
-                                .font(.system(size: 12, weight: .black, design: .monospaced))
-                                .foregroundColor(Color(red: 31/255, green: 105/255, blue: 255/255))
-                                .padding(.vertical, 8)
-                                .padding(.horizontal, 24)
-                                .background(Color.black)
-                                .cornerRadius(6)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .stroke(Color(red: 31/255, green: 105/255, blue: 255/255), lineWidth: 1.5)
-                                )
-                        }
+                    // Viewfinder corners
+                    PreviewViewfinder()
+                    
+                    if selectedFaceCategory == 0 {
+                        OledClockPreviewView(style: selectedClockStyle, isConnected: bleManager.isConnected)
+                    } else if selectedFaceCategory == 1 {
+                        EmotePreviewContainer(emotionIndex: selectedEmote)
+                    } else if selectedFaceCategory == 2 {
+                        OledActivityPreviewView(batteryLevel: bleManager.batteryLevel)
                     }
-                    Spacer()
                 }
-                .padding(.vertical, 12)
+                .frame(height: 180)
+                .border(Color.white, width: 2)
+                .padding(.top, 8)
                 
-                // MY FACES Selection List (Circular previews)
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Text("MY FACES")
-                            .font(.system(size: 13, weight: .black, design: .monospaced))
-                            .foregroundColor(.gray)
-                        Spacer()
-                        HStack(spacing: 4) {
-                            Text("BY RECENT ▾")
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundColor(.white)
-                            Spacer().frame(width: 8)
-                            Text("VIEW ALL >")
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundColor(Color(red: 31/255, green: 105/255, blue: 255/255))
-                        }
+                // Category tabs (CLOCK, EMOTE, ACTIVITY) - 8-bit selection bar
+                HStack(spacing: 0) {
+                    Button(action: { selectedFaceCategory = 0 }) {
+                        Text("CLOCK")
+                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                            .foregroundColor(selectedFaceCategory == 0 ? .black : .white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(selectedFaceCategory == 0 ? Color.white : Color.black)
                     }
                     
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 16) {
-                            CircularClockPreview(style: 1, isSelected: previewingFace && selectedClockStyle == 1) {
-                                previewingFace = true
-                                selectedClockStyle = 1
-                                if bleManager.isConnected {
-                                    bleManager.sendMode(0)
-                                }
-                            }
-                            
-                            CircularClockPreview(style: 0, isSelected: previewingFace && selectedClockStyle == 0) {
-                                previewingFace = true
-                                selectedClockStyle = 0
-                                if bleManager.isConnected {
-                                    bleManager.sendMode(0)
-                                }
-                            }
-                            
-                            CircularClockPreview(style: 2, isSelected: previewingFace && selectedClockStyle == 2) {
-                                previewingFace = true
-                                selectedClockStyle = 2
-                                if bleManager.isConnected {
-                                    bleManager.sendMode(0)
+                    Rectangle()
+                        .fill(Color.white)
+                        .frame(width: 2)
+                    
+                    Button(action: { selectedFaceCategory = 1 }) {
+                        Text("EMOTE")
+                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                            .foregroundColor(selectedFaceCategory == 1 ? .black : .white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(selectedFaceCategory == 1 ? Color.white : Color.black)
+                    }
+                    
+                    Rectangle()
+                        .fill(Color.white)
+                        .frame(width: 2)
+                    
+                    Button(action: { selectedFaceCategory = 2 }) {
+                        Text("ACTIVITY")
+                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                            .foregroundColor(selectedFaceCategory == 2 ? .black : .white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(selectedFaceCategory == 2 ? Color.white : Color.black)
+                    }
+                }
+                .border(Color.white, width: 2)
+                .padding(.top, 16)
+                
+                // Sub-items based on Category selection
+                Group {
+                    if selectedFaceCategory == 0 {
+                        // Clock Styles
+                        VStack(spacing: 12) {
+                            ForEach(0..<3, id: \.self) { styleIdx in
+                                Button(action: {
+                                    selectedClockStyle = styleIdx
+                                    if bleManager.isConnected {
+                                        bleManager.sendMode(0)
+                                    }
+                                }) {
+                                    HStack {
+                                        Text(clockStyleName(styleIdx))
+                                            .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                            .foregroundColor(.white)
+                                        Spacer()
+                                        if selectedClockStyle == styleIdx {
+                                            Text("[ SELECTED ]")
+                                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                                .foregroundColor(.blue)
+                                        }
+                                    }
+                                    .padding()
+                                    .border(selectedClockStyle == styleIdx ? Color.white : Color.white.opacity(0.15), width: 1.5)
                                 }
                             }
                         }
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 4)
-                    }
-                }
-                .padding(16)
-                .background(Color.black)
-                .cornerRadius(16)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white.opacity(0.15), lineWidth: 1.5)
-                )
-                
-                // CLASSIC faces
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("CLASSIC")
-                        .font(.system(size: 13, weight: .black, design: .monospaced))
-                        .foregroundColor(.gray)
-                    
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 16) {
-                            CircularClassicPreview(index: 0)
-                            CircularClassicPreview(index: 1)
-                            CircularClassicPreview(index: 2)
-                        }
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 4)
-                    }
-                }
-                .padding(16)
-                .background(Color.black)
-                .cornerRadius(16)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white.opacity(0.15), lineWidth: 1.5)
-                )
-                
-                // MY EMOTES faces
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("MY EMOTES")
-                        .font(.system(size: 13, weight: .black, design: .monospaced))
-                        .foregroundColor(.gray)
-                    
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 16) {
+                    } else if selectedFaceCategory == 1 {
+                        // Emote Styles
+                        VStack(spacing: 12) {
                             ForEach(0..<5, id: \.self) { emoteIdx in
-                                CircularEmotePreview(index: emoteIdx, isSelected: !previewingFace && selectedEmote == emoteIdx) {
-                                    previewingFace = false
+                                Button(action: {
                                     selectedEmote = emoteIdx
                                     if bleManager.isConnected {
                                         bleManager.sendMode(1)
                                     }
+                                }) {
+                                    HStack {
+                                        Text(emoteName(emoteIdx))
+                                            .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                            .foregroundColor(.white)
+                                        Spacer()
+                                        if selectedEmote == emoteIdx {
+                                            Text("[ ACTIVE ]")
+                                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                                .foregroundColor(.red)
+                                        }
+                                    }
+                                    .padding()
+                                    .border(selectedEmote == emoteIdx ? Color.white : Color.white.opacity(0.15), width: 1.5)
                                 }
                             }
                         }
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 4)
+                    } else if selectedFaceCategory == 2 {
+                        // Activity summary & Sync
+                        VStack(spacing: 16) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("APPLE HEALTH SYNC STATUS")
+                                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                        .foregroundColor(.gray)
+                                    Text("Activity steps and heart rate synced to watch face.")
+                                        .font(.system(size: 11, design: .monospaced))
+                                        .foregroundColor(.white)
+                                }
+                                Spacer()
+                            }
+                            .padding()
+                            .border(Color.white.opacity(0.15), width: 1.5)
+                            
+                            Button(action: {
+                                if bleManager.isConnected {
+                                    bleManager.syncTime()
+                                }
+                            }) {
+                                Text("FORCE SYNC")
+                                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.black)
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(Color.white)
+                                    .border(Color.white, width: 2)
+                            }
+                        }
                     }
                 }
-                .padding(16)
-                .background(Color.black)
-                .cornerRadius(16)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white.opacity(0.15), lineWidth: 1.5)
-                )
+                .padding(.top, 16)
                 
                 Spacer(minLength: 24)
                 
@@ -534,64 +478,294 @@ struct FacesView: View {
             }
             .padding(.bottom, 8)
         }
-        .onReceive(timer) { _ in
-            let formatter = DateFormatter()
-            formatter.dateFormat = "HH:mm"
-            timeString = formatter.string(from: Date())
+    }
+    
+    private func clockStyleName(_ index: Int) -> String {
+        switch index {
+        case 0: return "BIG DIGITAL"
+        case 1: return "DIGITAL DATE"
+        case 2: return "ANALOG CLOCK"
+        default: return "CLOCK"
         }
-        .onAppear {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "HH:mm"
-            timeString = formatter.string(from: Date())
+    }
+    
+    private func emoteName(_ index: Int) -> String {
+        switch index {
+        case 0: return "IDLE FACE"
+        case 1: return "WHAT FACE"
+        case 2: return "JUDGING FACE"
+        case 3: return "HAPPY FACE"
+        case 4: return "ANGRY FACE"
+        default: return "EMOTE"
+        }
+    }
+}
+
+// MARK: - u8g2 OLED style rendering views
+
+struct OledClockPreviewView: View {
+    let style: Int
+    let isConnected: Bool
+    @State private var currentDate = Date()
+    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    
+    var body: some View {
+        ZStack {
+            Color.black
+            
+            switch style {
+            case 0: // CLOCK_BIG_DIGITAL
+                VStack(spacing: 2) {
+                    HStack(alignment: .firstTextBaseline, spacing: 2) {
+                        Text(timeString(from: currentDate, format: "HH:mm"))
+                            .font(.system(size: 36, weight: .bold, design: .monospaced))
+                            .foregroundColor(.white)
+                        Text(timeString(from: currentDate, format: ":ss"))
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .foregroundColor(.white)
+                    }
+                    HStack {
+                        Text(isConnected ? "BLE OK" : "NO SYNC")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(.white)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                }
+                
+            case 1: // CLOCK_DIGITAL_DATE
+                VStack(spacing: 6) {
+                    Text(timeString(from: currentDate, format: "HH:mm:ss"))
+                        .font(.system(size: 24, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white)
+                    
+                    Text(dateString(from: currentDate, format: "EEEE, MMM dd"))
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundColor(.white)
+                }
+                
+            case 2: // CLOCK_ANALOG
+                HStack(spacing: 16) {
+                    // Analog clock face on the left
+                    ZStack {
+                        Circle()
+                            .stroke(Color.white, lineWidth: 2)
+                            .frame(width: 52, height: 52)
+                        
+                        // Center dot
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: 3, height: 3)
+                        
+                        // Hands
+                        AnalogClockHands(date: currentDate)
+                    }
+                    .frame(width: 52, height: 52)
+                    
+                    // Digital clock read on the right
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(alignment: .firstTextBaseline, spacing: 2) {
+                            Text(timeString(from: currentDate, format: "HH:mm"))
+                                .font(.system(size: 16, weight: .bold, design: .monospaced))
+                                .foregroundColor(.white)
+                            Text(timeString(from: currentDate, format: ":ss"))
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundColor(.white)
+                        }
+                        
+                        Text(dateString(from: currentDate, format: "dd/MM"))
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .foregroundColor(.white)
+                    }
+                }
+            default:
+                EmptyView()
+            }
+        }
+        .onReceive(timer) { input in
+            currentDate = input
+        }
+    }
+    
+    private func timeString(from date: Date, format: String) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = format
+        return formatter.string(from: date)
+    }
+    
+    private func dateString(from date: Date, format: String) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = format
+        return formatter.string(from: date)
+    }
+}
+
+struct AnalogClockHands: View {
+    let date: Date
+    
+    var body: some View {
+        GeometryReader { geo in
+            let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
+            let radius = min(geo.size.width, geo.size.height) / 2
+            
+            let calendar = Calendar.current
+            let components = calendar.dateComponents([.hour, .minute, .second], from: date)
+            let hour = CGFloat(components.hour ?? 0)
+            let minute = CGFloat(components.minute ?? 0)
+            let second = CGFloat(components.second ?? 0)
+            
+            let hourAngle = (hour * 30.0) + (minute * 0.5)
+            let minuteAngle = (minute * 6.0) + (second * 0.1)
+            let secondAngle = second * 6.0
+            
+            ZStack {
+                // Hour hand
+                Rectangle()
+                    .fill(Color.white)
+                    .frame(width: 2.5, height: radius * 0.5)
+                    .offset(y: -radius * 0.25)
+                    .rotationEffect(.degrees(hourAngle))
+                    .position(center)
+                
+                // Minute hand
+                Rectangle()
+                    .fill(Color.white)
+                    .frame(width: 1.5, height: radius * 0.75)
+                    .offset(y: -radius * 0.375)
+                    .rotationEffect(.degrees(minuteAngle))
+                    .position(center)
+                
+                // Second hand
+                Rectangle()
+                    .fill(Color.blue)
+                    .frame(width: 1.5, height: radius * 0.85)
+                    .offset(y: -radius * 0.425)
+                    .rotationEffect(.degrees(secondAngle))
+                    .position(center)
+            }
+        }
+    }
+}
+
+struct OledActivityPreviewView: View {
+    let batteryLevel: Int
+    
+    var body: some View {
+        ZStack {
+            Color.black
+            
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Image(systemName: "battery.100")
+                        .foregroundColor(.blue)
+                        .font(.system(size: 12))
+                    Text("BATTERY: \(batteryLevel)%")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white)
+                    Spacer()
+                }
+                
+                HStack(spacing: 8) {
+                    Image(systemName: "figure.walk")
+                        .foregroundColor(.red)
+                        .font(.system(size: 12))
+                    Text("STEPS: 8,432")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white)
+                    Spacer()
+                }
+                
+                HStack(spacing: 8) {
+                    Image(systemName: "heart.fill")
+                        .foregroundColor(.red)
+                        .font(.system(size: 12))
+                    Text("HEART RATE: 72 BPM")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white)
+                    Spacer()
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 8)
         }
     }
 }
 
 struct CameraView: View {
     @Binding var activeScreen: ActiveScreen
-    @Binding var selectedFilter: Int
+    @Binding var isCameraStreaming: Bool
+    @ObservedObject var cameraManager: CameraManager
+    @ObservedObject var udpStreamer: UDPStreamer
     
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 20) {
-                // Header Bar with Back Button
-                HStack {
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            activeScreen = .home
-                        }
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 18, weight: .bold))
-                            Text("CAMERA STREAM")
-                                .font(.system(size: 18, weight: .bold, design: .monospaced))
-                        }
-                        .foregroundColor(.white)
+        VStack(alignment: .leading, spacing: 20) {
+            // Header Bar with Back Button
+            HStack {
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        activeScreen = .home
                     }
-                    Spacer()
+                }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 18, weight: .bold))
+                        Text("CAMERA STREAM")
+                            .font(.system(size: 18, weight: .bold, design: .monospaced))
+                    }
+                    .foregroundColor(.white)
                 }
-                .padding(.top, 16)
-                
-                CameraStreamView()
-                    .padding(8)
+                Spacer()
+            }
+            .padding(.top, 16)
+            
+            // Camera Stream preview frame
+            ZStack {
+                if isCameraStreaming {
+                    CameraStreamView(cameraManager: cameraManager, udpStreamer: udpStreamer)
+                        .padding(8)
+                        .background(Color.black)
+                        .border(Color.white, width: 2)
+                } else {
+                    VStack(spacing: 12) {
+                        Image(systemName: "video.slash.fill")
+                            .font(.largeTitle)
+                            .foregroundColor(.red)
+                        Text("STREAM IS OFF")
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundColor(.white)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: 220)
+                    .padding(.vertical, 32)
                     .background(Color.black)
-                    .cornerRadius(16)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.white.opacity(0.18), lineWidth: 1.5)
-                    )
-                
-                Spacer(minLength: 24)
-                
-                HStack {
-                    Spacer()
-                    BottomBrandingIcon()
-                    Spacer()
+                    .border(Color.white, width: 2)
                 }
             }
-            .padding(.bottom, 8)
+            
+            // Toggle stream ON/OFF button
+            Button(action: {
+                withAnimation {
+                    isCameraStreaming.toggle()
+                }
+            }) {
+                Text(isCameraStreaming ? "TURN OFF STREAM" : "TURN ON STREAM")
+                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    .foregroundColor(isCameraStreaming ? .black : .white)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(isCameraStreaming ? Color.white : Color.black)
+                    .border(Color.white, width: 2)
+            }
+            .padding(.top, 16)
+            
+            Spacer()
+            
+            HStack {
+                Spacer()
+                BottomBrandingIcon()
+                Spacer()
+            }
         }
+        .padding(.bottom, 8)
     }
 }
 
@@ -636,11 +810,7 @@ struct TilesView: View {
                 }
                 .padding(16)
                 .background(Color.black)
-                .cornerRadius(16)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white.opacity(0.18), lineWidth: 1.5)
-                )
+                .border(Color.white, width: 2)
                 
                 Spacer(minLength: 24)
                 
@@ -677,11 +847,7 @@ struct TileCard: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
         .background(Color.white.opacity(0.04))
-        .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-        )
+        .border(Color.white.opacity(0.3), width: 1.5)
     }
 }
 
@@ -730,8 +896,9 @@ struct SettingsView: View {
                     }
                     .padding(.vertical, 8)
                     
-                    Divider()
-                        .background(Color.white.opacity(0.15))
+                    Rectangle()
+                        .fill(Color.white.opacity(0.3))
+                        .frame(height: 1.5)
                     
                     // Display Brightness
                     VStack(alignment: .leading, spacing: 8) {
@@ -749,8 +916,9 @@ struct SettingsView: View {
                     }
                     .padding(.vertical, 8)
                     
-                    Divider()
-                        .background(Color.white.opacity(0.15))
+                    Rectangle()
+                        .fill(Color.white.opacity(0.3))
+                        .frame(height: 1.5)
                     
                     // Health Sync
                     HStack {
@@ -771,11 +939,7 @@ struct SettingsView: View {
                 }
                 .padding(16)
                 .background(Color.black)
-                .cornerRadius(16)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white.opacity(0.18), lineWidth: 1.5)
-                )
+                .border(Color.white, width: 2)
                 
                 Spacer(minLength: 24)
                 
@@ -826,11 +990,7 @@ struct TipsView: View {
                 }
                 .padding(16)
                 .background(Color.black)
-                .cornerRadius(16)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white.opacity(0.18), lineWidth: 1.5)
-                )
+                .border(Color.white, width: 2)
                 
                 Spacer(minLength: 24)
                 
@@ -856,7 +1016,7 @@ struct TipRow: View {
                 .foregroundColor(Color(red: 31/255, green: 105/255, blue: 255/255))
                 .padding(6)
                 .background(Color.white.opacity(0.08))
-                .cornerRadius(4)
+                .border(Color.white.opacity(0.3), width: 1)
             
             Text(text)
                 .font(.system(size: 11, design: .monospaced))
@@ -902,11 +1062,7 @@ struct StoreView: View {
                 }
                 .padding(16)
                 .background(Color.black)
-                .cornerRadius(16)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white.opacity(0.18), lineWidth: 1.5)
-                )
+                .border(Color.white, width: 2)
                 
                 Spacer(minLength: 24)
                 
@@ -933,7 +1089,7 @@ struct StoreItemCard: View {
                 .foregroundColor(.white)
                 .frame(width: 44, height: 44)
                 .background(Color.white.opacity(0.08))
-                .cornerRadius(8)
+                .border(Color.white.opacity(0.3), width: 1)
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(name)
@@ -952,15 +1108,10 @@ struct StoreItemCard: View {
                 .padding(.vertical, 6)
                 .padding(.horizontal, 16)
                 .background(Color.white)
-                .cornerRadius(4)
         }
         .padding(12)
         .background(Color.white.opacity(0.02))
-        .cornerRadius(10)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-        )
+        .border(Color.white.opacity(0.12), width: 1)
     }
 }
 
@@ -1000,6 +1151,26 @@ struct PreviewViewfinder: View {
     }
 }
 
+struct ClockPreviewContainer: View {
+    let style: Int
+    let timeString: String
+    
+    var body: some View {
+        ZStack {
+            if style == 0 {
+                RetroClockPreviewView()
+                    .frame(width: 140, height: 100)
+            } else if style == 1 {
+                AnalogClockPreviewView()
+                    .frame(width: 140, height: 100)
+            } else if style == 2 {
+                BinaryClockPreviewView()
+                    .frame(width: 140, height: 100)
+            }
+        }
+    }
+}
+
 struct RetroClockPreviewView: View {
     @State private var currentDate = Date()
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -1021,10 +1192,7 @@ struct RetroClockPreviewView: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color.white, lineWidth: 1.5)
-            )
+            .border(Color.white, width: 1.5)
             
             HStack {
                 Text("SYS_OK")
@@ -1201,26 +1369,6 @@ struct BinaryColumn: View {
                     .stroke(Color.white, lineWidth: 1)
                     .background(Circle().fill(bit == 1 ? Color.white : Color.clear))
                     .frame(width: 6, height: 6)
-            }
-        }
-    }
-}
-
-struct ClockPreviewContainer: View {
-    let style: Int
-    let timeString: String
-    
-    var body: some View {
-        ZStack {
-            if style == 0 {
-                RetroClockPreviewView()
-                    .frame(width: 140, height: 100)
-            } else if style == 1 {
-                AnalogClockPreviewView()
-                    .frame(width: 140, height: 100)
-            } else if style == 2 {
-                BinaryClockPreviewView()
-                    .frame(width: 140, height: 100)
             }
         }
     }
@@ -1449,97 +1597,6 @@ struct BottomBrandingIcon: View {
 
 // MARK: - Circular Previews
 
-struct CircularClockPreview: View {
-    let style: Int
-    let isSelected: Bool
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 6) {
-                ZStack {
-                    Circle()
-                        .stroke(isSelected ? Color(red: 31/255, green: 105/255, blue: 255/255) : Color.white.opacity(0.12), lineWidth: 2)
-                        .frame(width: 76, height: 76)
-                        .background(Circle().fill(Color.white.opacity(0.02)))
-                    
-                    if style == 0 {
-                        // Yellow Retro/Active clock styling
-                        ZStack {
-                            Circle()
-                                .fill(Color(red: 255/255, green: 204/255, blue: 0/255))
-                                .frame(width: 64, height: 64)
-                            VStack(spacing: 1) {
-                                Text("10")
-                                    .font(.system(size: 15, weight: .bold, design: .monospaced))
-                                    .foregroundColor(.black)
-                                Text("08")
-                                    .font(.system(size: 15, weight: .bold, design: .monospaced))
-                                    .foregroundColor(.black)
-                            }
-                        }
-                    } else if style == 1 {
-                        // Analog style clock preview
-                        ZStack {
-                            Circle()
-                                .stroke(Color.white, lineWidth: 1)
-                                .frame(width: 64, height: 64)
-                            
-                            Rectangle()
-                                .fill(Color.white)
-                                .frame(width: 1.5, height: 18)
-                                .offset(y: -9)
-                                .rotationEffect(.degrees(45))
-                            Rectangle()
-                                .fill(Color.white)
-                                .frame(width: 2, height: 14)
-                                .offset(y: -7)
-                                .rotationEffect(.degrees(120))
-                            Rectangle()
-                                .fill(Color.blue)
-                                .frame(width: 1, height: 22)
-                                .offset(y: -11)
-                                .rotationEffect(.degrees(270))
-                        }
-                    } else if style == 2 {
-                        // Binary or Activity style clock preview
-                        ZStack {
-                            Circle()
-                                .stroke(Color.white, lineWidth: 1)
-                                .frame(width: 64, height: 64)
-                            
-                            Path { path in
-                                path.addArc(center: CGPoint(x: 32, y: 32), radius: 22, startAngle: .degrees(-90), endAngle: .degrees(45), clockwise: false)
-                            }
-                            .stroke(Color.red, lineWidth: 2)
-                            .frame(width: 64, height: 64)
-                            
-                            Path { path in
-                                path.addArc(center: CGPoint(x: 32, y: 32), radius: 16, startAngle: .degrees(-90), endAngle: .degrees(180), clockwise: false)
-                            }
-                            .stroke(Color.green, lineWidth: 2)
-                            .frame(width: 64, height: 64)
-                        }
-                    }
-                }
-                
-                Text(styleName.uppercased())
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundColor(isSelected ? .white : .gray)
-            }
-        }
-    }
-    
-    private var styleName: String {
-        switch style {
-        case 0: return "Active"
-        case 1: return "Premium Analog"
-        case 2: return "Activity"
-        default: return ""
-        }
-    }
-}
-
 struct CircularClassicPreview: View {
     let index: Int
     
@@ -1630,57 +1687,6 @@ struct CircularClassicPreview: View {
     }
 }
 
-struct CircularEmotePreview: View {
-    let index: Int
-    let isSelected: Bool
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 6) {
-                ZStack {
-                    Circle()
-                        .stroke(isSelected ? Color(red: 31/255, green: 105/255, blue: 255/255) : Color.white.opacity(0.12), lineWidth: 2)
-                        .frame(width: 76, height: 76)
-                        .background(Circle().fill(Color.white.opacity(0.02)))
-                    
-                    VStack(spacing: 4) {
-                        Image(systemName: emoteIcon)
-                            .font(.system(size: 20))
-                            .foregroundColor(isSelected ? .white : .gray)
-                    }
-                }
-                
-                Text(emoteName.uppercased())
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundColor(isSelected ? .white : .gray)
-            }
-        }
-    }
-    
-    private var emoteIcon: String {
-        switch index {
-        case 0: return "face.smiling"
-        case 1: return "questionmark.circle"
-        case 2: return "eye"
-        case 3: return "face.smiling.fill"
-        case 4: return "bolt.circle"
-        default: return "face.smiling"
-        }
-    }
-    
-    private var emoteName: String {
-        switch index {
-        case 0: return "Idle"
-        case 1: return "What"
-        case 2: return "Judging"
-        case 3: return "Happy"
-        case 4: return "Angry"
-        default: return "Idle"
-        }
-    }
-}
-
 // MARK: - WKWebView GIF Loop Engine with SVG/Native Fallbacks
 
 struct GifImageView: View {
@@ -1703,11 +1709,7 @@ struct GifImageView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.white.opacity(0.02))
-            .cornerRadius(8)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
-            )
+            .border(Color.white.opacity(0.1), width: 1)
         }
     }
 }
