@@ -534,13 +534,13 @@ struct FacesView: View {
                         }
 
                         VStack(spacing: 0) {
-                            ActivityRow(icon: "figure.walk", label: "STEPS", value: "\(healthKit.stepCount)", unit: "STEPS", accent: pixelBlue)
+                            ActivityRow(icon: "figure.walk", assetName: "icon_steps", label: "STEPS", value: "\(healthKit.stepCount)", unit: "STEPS", accent: pixelBlue)
                             Divider().background(Color.white.opacity(0.1))
-                            ActivityRow(icon: "heart.fill", label: "HEART RATE", value: "\(healthKit.heartRate)", unit: "BPM", accent: pixelRed)
+                            ActivityRow(icon: "heart.fill", assetName: "icon_heartrate", label: "HEART RATE", value: "\(healthKit.heartRate)", unit: "BPM", accent: pixelRed)
                             Divider().background(Color.white.opacity(0.1))
-                            ActivityRow(icon: "flame.fill", label: "CALORIES", value: "\(healthKit.activeCalories)", unit: "KCAL", accent: pixelRed)
+                            ActivityRow(icon: "flame.fill", assetName: "icon_calories", label: "CALORIES", value: "\(healthKit.activeCalories)", unit: "KCAL", accent: pixelRed)
                             Divider().background(Color.white.opacity(0.1))
-                            ActivityRow(icon: "battery.100", label: "BATTERY", value: "\(bleManager.batteryLevel)%", unit: "CASE", accent: pixelBlue)
+                            ActivityRow(icon: "battery.100", assetName: "icon_battery", label: "BATTERY", value: "\(bleManager.batteryLevel)%", unit: "CASE", accent: pixelBlue)
                         }
                         .background(pixelBlack)
                         .cornerRadius(16)
@@ -603,6 +603,7 @@ struct FacesView: View {
 
 struct ActivityRow: View {
     let icon: String
+    let assetName: String
     let label: String
     let value: String
     let unit: String
@@ -610,10 +611,19 @@ struct ActivityRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Image(systemName: icon)
-                .font(.system(size: 18, weight: .black))
-                .foregroundColor(accent)
-                .frame(width: 28)
+            if let uiImage = UIImage(named: assetName) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundColor(accent)
+                    .frame(width: 24, height: 24)
+                    .frame(width: 28)
+            } else {
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .black))
+                    .foregroundColor(accent)
+                    .frame(width: 28)
+            }
 
             Text(label)
                 .font(.system(size: 12, weight: .bold))
