@@ -23,14 +23,14 @@ class ServerCallbacks: public NimBLEServerCallbacks {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Mode characteristic: 1-byte mode index  [0=CLOCK | 1=MOCHI | 2=CAMERA | 3=ACTIVITY]
+// Mode characteristic: 1-byte mode index  [0=CLOCK | 1=MOCHI | 2=ACTIVITY]
 // ─────────────────────────────────────────────────────────────────────────────
 class ModeCallback: public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic *pCharacteristic) override {
         std::string rxValue = pCharacteristic->getValue();
         if (rxValue.length() > 0) {
             uint8_t modeVal = rxValue[0];
-            if (modeVal <= 3) {   // 0-3 now valid
+            if (modeVal <= 2) {   // 0-2 valid now
                 SystemMode newMode = (SystemMode)modeVal;
                 if (currentMode != newMode) {
                     currentMode = newMode;

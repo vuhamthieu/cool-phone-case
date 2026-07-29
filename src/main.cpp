@@ -13,7 +13,6 @@
 SystemMode currentMode = MODE_MOCHI;
 ClockStyle currentClockStyle = CLOCK_BIG_DIGITAL;
 MochiEmotion currentMochiEmotion = MOCHI_HAPPY;
-CameraFilter currentCameraFilter = CAMERA_NORMAL;
 
 volatile bool modeChangedFlag = false;
 volatile bool touchTriggeredFlag = false;
@@ -28,14 +27,8 @@ volatile uint16_t activityCalories = 0;
 volatile bool isLowBattery = false;
 SemaphoreHandle_t displayMutex = NULL;
 
-// Camera Frame Cache
-uint8_t cachedCameraFrame[1024];
-bool hasCachedFrame = false;
-
-
 // Task functions
-void Task1_UDP_Display(void* pvParameters);
-void Task2_General(void* pvParameters);
+void Task_General(void* pvParameters);
 
 void setup() {
     Serial.begin(115200);
@@ -55,7 +48,7 @@ void setup() {
     // Initialize components
     displayInit();
     bleInit();
-    wifiStreamInit(); // Starts Wi-Fi AP, UDP Server, and ArduinoOTA
+    wifiStreamInit(); // Starts Wi-Fi AP and ArduinoOTA (camera UDP loop removed)
     
     // Show splash screen on boot
     if (xSemaphoreTake(displayMutex, portMAX_DELAY) == pdTRUE) {
@@ -97,69 +90,24 @@ void setup() {
     }
     Serial.printf("Initial Battery: %.2fV (%d%%), LowBattery=%s\n", batteryVoltage, pct, isLowBattery ? "TRUE" : "FALSE");
     
-    // Create FreeRTOS Tasks pinned to Core 0 (since ESP32-C3 is single-core)
+    // Create General Task pinned to Core 0
     xTaskCreatePinnedToCore(
-        Task1_UDP_Display,
-        "UDP_Display_Task",
-        4096,
-        NULL,
-        2, // Higher priority for smooth frame processing
-        NULL,
-        0
-    );
-
-    xTaskCreatePinnedToCore(
-        Task2_General,
+        Task_General,
         "General_Task",
         4096,
         NULL,
-        1, // Lower priority
+        1,
         NULL,
         0
     );
 }
 
 void loop() {
-    // The standard loop task is suspended to let our FreeRTOS tasks run
     vTaskDelay(portMAX_DELAY);
 }
 
-// Task 1: Dedicated to the UDP Receiver loop and rendering video frames to the OLED display
-void Task1_UDP_Display(void* pvParameters) {
-    (void)pvParameters;
-    
-    for (;;) {
-        if (currentMode == MODE_CAMERA && !isLowBattery) {
-            const uint8_t* newFrame = wifiStreamGetLatestFrame();
-            if (newFrame != nullptr) {
-                // Cache frame in case filter changes while stream is idle
-                memcpy(cachedCameraFrame, newFrame, 1024);
-                hasCachedFrame = true;
-                
-                if (xSemaphoreTake(displayMutex, portMAX_DELAY) == pdTRUE) {
-                    displayClear();
-                    renderCameraStream(newFrame, currentCameraFilter);
-                    displayUpdate();
-                    xSemaphoreGive(displayMutex);
-                }
-            } else if (!hasCachedFrame) {
-                // Display waiting screen if no frames received yet
-                if (xSemaphoreTake(displayMutex, portMAX_DELAY) == pdTRUE) {
-                    displayClear();
-                    renderCameraStream(nullptr, currentCameraFilter);
-                    displayUpdate();
-                    xSemaphoreGive(displayMutex);
-                }
-            }
-            vTaskDelay(pdMS_TO_TICKS(5)); // Prevent CPU starvation
-        } else {
-            vTaskDelay(pdMS_TO_TICKS(100)); // Idle/yield when not in camera mode or if battery is low
-        }
-    }
-}
-
-// Task 2: Handles the general loop (ArduinoOTA handle(), BLE Events, ADC battery polling, and touch sensor status checks)
-void Task2_General(void* pvParameters) {
+// Handles the general loop (ArduinoOTA handle(), BLE Events, ADC battery polling, touch, and display rendering)
+void Task_General(void* pvParameters) {
     (void)pvParameters;
     
     unsigned long lastBatteryCheck = 0;
@@ -281,11 +229,6 @@ void Task2_General(void* pvParameters) {
                     break;
                 }
                     
-                case MODE_CAMERA:
-                    // Task 1 handles camera rendering, so Task 2 yields
-                    vTaskDelay(pdMS_TO_TICKS(50));
-                    break;
-
                 case MODE_ACTIVITY:
                     if (xSemaphoreTake(displayMutex, portMAX_DELAY) == pdTRUE) {
                         displayClear();

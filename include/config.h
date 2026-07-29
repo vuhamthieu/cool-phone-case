@@ -9,20 +9,18 @@
 // 8-byte binary payload: [steps:uint32_t][bpm:uint16_t][calories:uint16_t] (all little-endian)
 #define CHARACTERISTIC_ACTIVITY_UUID  "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
-// Wi-Fi Config for Camera Streaming
+// Wi-Fi Config for OTA only
 #if __has_include("secrets.h")
 #include "secrets.h"
 #else
 #error "secrets.h is missing! Copy secrets.h.example to secrets.h and customize your local credentials."
 #endif
-#define UDP_PORT    5001
 
-// 4 Main Modes (MODE_ACTIVITY = 3 is new)
+// 3 Main Modes (MODE_CAMERA has been completely removed)
 enum SystemMode {
     MODE_CLOCK    = 0,
     MODE_MOCHI    = 1,
-    MODE_CAMERA   = 2,
-    MODE_ACTIVITY = 3
+    MODE_ACTIVITY = 2
 };
 
 // Sub-states for Clock Mode
@@ -43,25 +41,15 @@ enum MochiEmotion {
     MOCHI_EMOTION_MAX = 5
 };
 
-// Sub-states/Filters for Camera Mode
-enum CameraFilter {
-    CAMERA_NORMAL = 0,
-    CAMERA_INVERTED = 1,
-    CAMERA_VIEWFINDER = 2,
-    CAMERA_FILTER_MAX = 3
-};
-
 // Global States
 extern SystemMode currentMode;
 extern ClockStyle currentClockStyle;
 extern MochiEmotion currentMochiEmotion;
-extern CameraFilter currentCameraFilter;
 extern volatile bool modeChangedFlag;
 extern volatile bool touchTriggeredFlag;
 extern bool timeSynced;
 
 // Activity Data received from iOS HealthKit via BLE
-// Declared volatile so the ISR-like BLE callback and the render task see fresh values
 extern volatile uint32_t activitySteps;
 extern volatile uint16_t activityBPM;
 extern volatile uint16_t activityCalories;
@@ -74,7 +62,3 @@ extern SemaphoreHandle_t displayMutex;
 extern bool mochiGestureActive;
 extern MochiEmotion mochiActiveGestureEmotion;
 extern unsigned long mochiGestureEndTime;
-
-// Camera Frame Cache
-extern uint8_t cachedCameraFrame[1024];
-extern bool hasCachedFrame;

@@ -65,20 +65,6 @@ void touchProcess() {
                     mochiTouchStartTime = millis();
                     mochiTouchIsHeld = false;
                     break;
-                case MODE_CAMERA:
-                    currentCameraFilter = (CameraFilter)((currentCameraFilter + 1) % CAMERA_FILTER_MAX);
-                    Serial.printf("Camera Filter changed to: %d\n", currentCameraFilter);
-                    
-                    // Force a re-render of cached frame with new filter (under mutex protection)
-                    if (hasCachedFrame) {
-                        if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-                            displayClear();
-                            renderCameraStream(cachedCameraFrame, currentCameraFilter);
-                            displayUpdate();
-                            xSemaphoreGive(displayMutex);
-                        }
-                    }
-                    break;
             }
         } else if (currentTouchState == LOW && touchTriggeredFlag) {
             // Touch released

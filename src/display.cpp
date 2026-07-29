@@ -133,49 +133,6 @@ void renderMochi(MochiEmotion emotion, uint8_t frameIndex) {
     u8g2.drawXBMP(0, 0, 128, 64, anim.frames[frame]);
 }
 
-void renderCameraStream(const uint8_t* frameBuffer, CameraFilter filter) {
-    if (frameBuffer == nullptr) {
-        u8g2.setFont(u8g2_font_6x10_tf);
-        drawTextCentered(32, "WAITING FOR STREAM");
-        return;
-    }
-    
-    if (filter == CAMERA_INVERTED) {
-        // Invert the 1-bit buffer bytes (1024 bytes)
-        uint8_t invertedBuffer[1024];
-        for (int i = 0; i < 1024; i++) {
-            invertedBuffer[i] = ~frameBuffer[i];
-        }
-        u8g2.drawXBMP(0, 0, 128, 64, invertedBuffer);
-    } else {
-        // Render normal stream
-        u8g2.drawXBMP(0, 0, 128, 64, frameBuffer);
-    }
-    
-    // Draw Viewfinder Overlay if requested
-    if (filter == CAMERA_VIEWFINDER) {
-        u8g2.setDrawColor(2); // XOR mode so overlay is visible on both black and white pixels
-        
-        // Center crosshair
-        u8g2.drawHLine(60, 32, 8);
-        u8g2.drawVLine(64, 28, 8);
-        
-        // Corners brackets
-        u8g2.drawHLine(4, 4, 8);
-        u8g2.drawVLine(4, 4, 8);
-        
-        u8g2.drawHLine(116, 4, 8);
-        u8g2.drawVLine(123, 4, 8);
-        
-        u8g2.drawHLine(4, 59, 8);
-        u8g2.drawVLine(4, 52, 8);
-        
-        u8g2.drawHLine(116, 59, 8);
-        u8g2.drawVLine(123, 52, 8);
-        
-        u8g2.setDrawColor(1); // Restore normal write mode
-    }
-}
 
 void drawLowBatteryScreen(bool blinkState) {
     if (blinkState) {

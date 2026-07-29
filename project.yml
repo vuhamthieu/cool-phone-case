@@ -11,7 +11,6 @@ targets:
     info:
       path: ios/Info.plist
       properties:
-        NSCameraUsageDescription: "Streaming retro video to OLED"
         NSBluetoothAlwaysUsageDescription: "Sending commands to ESP32"
         NSHealthShareUsageDescription: "Reading steps, heart rate and calories for the Activity watch face"
         UIAppFonts:
