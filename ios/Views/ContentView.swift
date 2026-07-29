@@ -707,65 +707,119 @@ struct OLEDClockPreview: View {
     }
 }
 
-// MARK: - Pixel Analog Dial
+// MARK: - Pixel Analog Dial (Bresenham grid — zero rotationEffect, zero Circle)
 
+/// Renders a 32×32 pixel grid where every cell is a hard Rectangle() block.
+/// Clock border, tick marks, and all three hands are plotted with a
+/// Bresenham integer line — genuinely blocky, no anti-aliasing possible.
 struct PixelAnalogDial: View {
     let date: Date
     let size: CGFloat
 
-    private var calendar: Calendar { Calendar.current }
-    private var comps: DateComponents { calendar.dateComponents([.hour, .minute, .second], from: date) }
-    private var h: CGFloat { CGFloat(comps.hour ?? 0) }
-    private var m: CGFloat { CGFloat(comps.minute ?? 0) }
-    private var s: CGFloat { CGFloat(comps.second ?? 0) }
-    private var hourDeg:   CGFloat { (h.truncatingRemainder(dividingBy: 12)) * 30 + m * 0.5 }
-    private var minuteDeg: CGFloat { m * 6 + s * 0.1 }
-    private var secondDeg: CGFloat { s * 6 }
+    private let G = 32   // grid dimension
 
     var body: some View {
-        ZStack {
-            // Clock circle
-            Circle().stroke(pixelWhite, lineWidth: 2).frame(width: size, height: size)
+        let grid = buildGrid()
+        let cell = size / CGFloat(G)
 
-            // 4 cardinal tick marks
-            ForEach([0.0, 90.0, 180.0, 270.0], id: \.self) { deg in
-                Rectangle()
-                    .fill(pixelWhite)
-                    .frame(width: 1.5, height: size * 0.08)
-                    .offset(y: -(size / 2 - size * 0.04))
-                    .rotationEffect(.degrees(deg))
+        VStack(spacing: 0) {
+            ForEach(0..<G, id: \.self) { row in
+                HStack(spacing: 0) {
+                    ForEach(0..<G, id: \.self) { col in
+                        Rectangle()
+                            .fill(colorFor(grid[row][col]))
+                            .frame(width: cell, height: cell)
+                    }
+                }
             }
-
-            // Hour hand
-            PixelHand(angle: hourDeg, length: size * 0.28, width: 2.5, color: pixelWhite)
-            // Minute hand
-            PixelHand(angle: minuteDeg, length: size * 0.38, width: 1.5, color: pixelWhite)
-            // Second hand — use blue per u8g2 rendering
-            PixelHand(angle: secondDeg, length: size * 0.42, width: 1.0, color: pixelBlue)
-
-            // Center dot
-            Circle().fill(pixelWhite).frame(width: 4, height: 4)
         }
-        .frame(width: size, height: size)
+    }
+
+    // 0 = black   1 = white   2 = blue (second hand)
+    private func colorFor(_ v: Int) -> Color {
+        switch v {
+        case 1: return pixelWhite
+        case 2: return pixelBlue
+        default: return pixelBlack
+        }
+    }
+
+    private func buildGrid() -> [[Int]] {
+        var g = Array(repeating: Array(repeating: 0, count: G), count: G)
+        let cx = G / 2, cy = G / 2
+        let R  = G / 2 - 2
+
+        // 1. Circle border via integer distance check
+        for row in 0..<G {
+            for col in 0..<G {
+                let dx = col - cx, dy = row - cy
+                let d2 = dx*dx + dy*dy
+                if d2 >= (R-1)*(R-1) && d2 <= R*R { g[row][col] = 1 }
+            }
+        }
+
+        // 2. Cardinal tick marks (2-pixel deep at 12, 3, 6, 9)
+        let ticks: [(Int,Int)] = [
+            (cx, cy - R + 1), (cx, cy - R + 2),
+            (cx, cy + R - 1), (cx, cy + R - 2),
+            (cx - R + 1, cy), (cx - R + 2, cy),
+            (cx + R - 1, cy), (cx + R - 2, cy),
+        ]
+        for (col, row) in ticks where row >= 0 && row < G && col >= 0 && col < G {
+            g[row][col] = 1
+        }
+
+        // 3. Parse time
+        let comps = Calendar.current.dateComponents([.hour, .minute, .second], from: date)
+        let h = Double(comps.hour   ?? 0)
+        let m = Double(comps.minute ?? 0)
+        let s = Double(comps.second ?? 0)
+
+        // 4. Draw hands with Bresenham
+        let hourDeg   = (h.truncatingRemainder(dividingBy: 12)) * 30 + m * 0.5 - 90
+        let minuteDeg = m * 6 + s * 0.1 - 90
+        let secondDeg = s * 6 - 90
+
+        drawHand(on: &g, cx: cx, cy: cy, deg: hourDeg,   len: Int(Double(R) * 0.50), color: 1)
+        drawHand(on: &g, cx: cx, cy: cy, deg: minuteDeg, len: Int(Double(R) * 0.72), color: 1)
+        drawHand(on: &g, cx: cx, cy: cy, deg: secondDeg, len: Int(Double(R) * 0.82), color: 2)
+
+        // 5. Center dot (2x2)
+        for dr in 0..<2 { for dc in 0..<2 {
+            let r = cy+dr, c = cx+dc
+            if r < G && c < G { g[r][c] = 1 }
+        }}
+
+        return g
+    }
+
+    private func drawHand(on grid: inout [[Int]],
+                          cx: Int, cy: Int, deg: Double, len: Int, color: Int) {
+        let rad = deg * .pi / 180.0
+        let x1 = cx + Int((Double(len) * cos(rad)).rounded())
+        let y1 = cy + Int((Double(len) * sin(rad)).rounded())
+        for (col, row) in bresenham(x0: cx, y0: cy, x1: x1, y1: y1) {
+            if row >= 0 && row < G && col >= 0 && col < G { grid[row][col] = color }
+        }
+    }
+
+    private func bresenham(x0: Int, y0: Int, x1: Int, y1: Int) -> [(Int,Int)] {
+        var pts: [(Int,Int)] = []
+        var x = x0, y = y0
+        let dx = abs(x1-x0), dy = abs(y1-y0)
+        let sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1
+        var err = dx - dy
+        while true {
+            pts.append((x, y))
+            if x == x1 && y == y1 { break }
+            let e2 = 2 * err
+            if e2 > -dy { err -= dy; x += sx }
+            if e2 <  dx { err += dx; y += sy }
+        }
+        return pts
     }
 }
 
-// MARK: - Pixel Hand
-
-struct PixelHand: View {
-    let angle: CGFloat
-    let length: CGFloat
-    let width: CGFloat
-    let color: Color
-
-    var body: some View {
-        Rectangle()
-            .fill(color)
-            .frame(width: width, height: length)
-            .offset(y: -length / 2)
-            .rotationEffect(.degrees(angle))
-    }
-}
 
 // MARK: - OLED Emote Preview (loops the GIF)
 
@@ -946,135 +1000,200 @@ struct ListNavRow: View {
     }
 }
 
-// MARK: - Pixel Art Icons (no smoothing, blocky, sharp)
+// MARK: - Pixel Sprite primitive
+
+/// Renders a pixel-map [[Int]] as a grid of hard Rectangle() blocks.
+/// Values: 0 = black, 1 = white, 2 = red, 3 = blue
+struct PixelSprite: View {
+    let pixels: [[Int]]
+    let pixelSize: CGFloat
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(0..<pixels.count, id: \.self) { row in
+                HStack(spacing: 0) {
+                    ForEach(0..<pixels[row].count, id: \.self) { col in
+                        Rectangle()
+                            .fill(fill(pixels[row][col]))
+                            .frame(width: pixelSize, height: pixelSize)
+                    }
+                }
+            }
+        }
+    }
+
+    private func fill(_ v: Int) -> Color {
+        switch v {
+        case 1: return pixelWhite
+        case 2: return pixelRed
+        case 3: return pixelBlue
+        default: return pixelBlack
+        }
+    }
+}
+
+// MARK: - Pixel Art Icons (pure Rectangle grids — NO Circle, NO Path, NO rotationEffect)
+// Values: 0=black  1=white  2=red  3=blue
+
+// ── Robot Face (11 cols × 11 rows) ─────────────────────────────────────────
+private let robotFacePixels: [[Int]] = [
+    [0,0,0,0,0,2,0,0,0,0,0],  // red antenna tip
+    [0,0,0,0,0,1,0,0,0,0,0],  // antenna stem
+    [0,0,0,0,0,1,0,0,0,0,0],  // antenna stem
+    [1,1,1,1,1,1,1,1,1,1,1],  // head top border
+    [1,0,0,0,0,0,0,0,0,0,1],  // sides
+    [1,0,1,1,0,0,1,1,0,0,1],  // left + right eye
+    [1,0,1,1,0,0,1,1,0,0,1],  // eyes
+    [1,0,0,0,0,0,0,0,0,0,1],  // blank
+    [1,0,1,1,1,1,1,0,0,0,1],  // mouth bar
+    [1,0,0,0,0,0,0,0,0,0,1],  // blank
+    [1,1,1,1,1,1,1,1,1,1,1],  // head bottom border
+]
 
 struct RobotFaceIcon: View {
     let size: CGFloat
     var body: some View {
-        Canvas { ctx, _ in
-            // Draw with explicit pixel blocks to simulate 1-bit display
-        }
-        .overlay(
-            VStack(spacing: 2) {
-                // Antenna
-                VStack(spacing: 0) {
-                    Circle().fill(pixelRed).frame(width: 6, height: 6)
-                    Rectangle().fill(pixelWhite).frame(width: 2, height: 8)
-                }
-                // Head
-                ZStack {
-                    Rectangle().fill(pixelBlack).frame(width: size * 0.9, height: size * 0.65)
-                        .border(pixelWhite, width: 2)
-                    HStack(spacing: 8) {
-                        Rectangle().fill(pixelWhite).frame(width: 8, height: 8)
-                        Rectangle().fill(pixelWhite).frame(width: 8, height: 8)
-                    }
-                }
-            }
-        )
-        .frame(width: size, height: size)
+        PixelSprite(pixels: robotFacePixels,
+                    pixelSize: size / CGFloat(robotFacePixels[0].count))
+            .frame(width: size, height: size)
     }
 }
+
+// ── Camera (11 cols × 8 rows) ──────────────────────────────────────────────
+// Body = bordered box with red dot; right = pixel trapezoid via stepped columns
+private let cameraBodyPixels: [[Int]] = [
+    [0,0,0,0,0,0,0,0,1,1,0],  // lens top step
+    [1,1,1,1,1,1,1,0,1,1,1],  // body top + lens right
+    [1,0,0,0,0,0,1,0,1,1,1],
+    [1,0,0,2,0,0,1,0,1,1,1],  // red recording dot
+    [1,0,0,0,0,0,1,0,1,1,1],
+    [1,1,1,1,1,1,1,0,1,1,1],  // body bottom
+    [0,0,0,0,0,0,0,0,1,1,0],  // lens bottom step
+    [0,0,0,0,0,0,0,0,0,0,0],
+]
 
 struct CameraPixelIcon: View {
     let size: CGFloat
     var body: some View {
-        HStack(spacing: 2) {
-            ZStack {
-                Rectangle().fill(pixelBlack).frame(width: size * 0.72, height: size * 0.5)
-                    .border(pixelWhite, width: 2)
-                Circle().fill(pixelRed).frame(width: size * 0.22, height: size * 0.22)
-            }
-            // Lens trapezoid
-            Path { p in
-                p.move(to: .init(x: 0, y: size * 0.08))
-                p.addLine(to: .init(x: size * 0.22, y: 0))
-                p.addLine(to: .init(x: size * 0.22, y: size * 0.5))
-                p.addLine(to: .init(x: 0, y: size * 0.42))
-                p.closeSubpath()
-            }
-            .stroke(pixelWhite, lineWidth: 2)
-            .frame(width: size * 0.22, height: size * 0.5)
-        }
-        .frame(width: size, height: size)
+        PixelSprite(pixels: cameraBodyPixels,
+                    pixelSize: size / CGFloat(cameraBodyPixels[0].count))
+            .frame(width: size, height: size)
     }
 }
+
+// ── 2×2 Grid / Tiles (11 × 11) ─────────────────────────────────────────────
+private let tilesPixels: [[Int]] = [
+    [1,1,1,1,1,1,1,1,1,1,1],
+    [1,0,0,0,0,1,0,0,0,0,1],
+    [1,0,0,0,0,1,0,0,0,0,1],
+    [1,0,0,0,0,1,0,0,0,0,1],
+    [1,0,0,0,0,1,0,0,0,0,1],
+    [1,1,1,1,1,1,1,1,1,1,1],
+    [1,0,0,0,0,1,0,0,0,0,1],
+    [1,0,0,0,0,1,0,0,0,0,1],
+    [1,0,0,0,0,1,0,0,0,0,1],
+    [1,0,0,0,0,1,0,0,0,0,1],
+    [1,1,1,1,1,1,1,1,1,1,1],
+]
 
 struct GridPixelIcon: View {
     let size: CGFloat
-    private let cell: CGFloat
-    init(size: CGFloat) { self.size = size; self.cell = size * 0.38 }
     var body: some View {
-        VStack(spacing: 4) {
-            HStack(spacing: 4) {
-                pixelCell; pixelCell
-            }
-            HStack(spacing: 4) {
-                pixelCell; pixelCell
-            }
-        }
-        .frame(width: size, height: size)
-    }
-    var pixelCell: some View {
-        Rectangle().stroke(pixelWhite, lineWidth: 2).frame(width: cell, height: cell)
+        PixelSprite(pixels: tilesPixels,
+                    pixelSize: size / CGFloat(tilesPixels[0].count))
+            .frame(width: size, height: size)
     }
 }
+
+// ── Gear / Settings (11 × 11) ──────────────────────────────────────────────
+// 8-tooth gear approximated as pixel bumps on a thick ring; red center hub
+private let gearPixels: [[Int]] = [
+    [0,0,0,1,1,1,1,0,0,0,0],  // top teeth
+    [0,1,1,1,1,1,1,1,1,0,0],
+    [1,1,1,0,0,0,0,1,1,1,0],  // side arms
+    [1,1,0,0,2,2,0,0,1,1,0],  // ring + red hub
+    [1,1,0,2,2,2,2,0,1,1,0],
+    [1,1,0,2,2,2,2,0,1,1,0],
+    [1,1,0,0,2,2,0,0,1,1,0],
+    [1,1,1,0,0,0,0,1,1,1,0],
+    [0,1,1,1,1,1,1,1,1,0,0],
+    [0,0,0,1,1,1,1,0,0,0,0],  // bottom teeth
+    [0,0,0,0,0,0,0,0,0,0,0],
+]
 
 struct GearPixelIcon: View {
     var body: some View {
-        ZStack {
-            Circle().stroke(pixelWhite, lineWidth: 2).frame(width: 22, height: 22)
-            ForEach(0..<8, id: \.self) { i in
-                Rectangle().fill(pixelWhite).frame(width: 3, height: 6)
-                    .offset(y: -12).rotationEffect(.degrees(Double(i) * 45))
-            }
-            Circle().fill(pixelRed).frame(width: 8, height: 8)
-        }
-        .frame(width: 28, height: 28)
+        PixelSprite(pixels: gearPixels, pixelSize: 3)
+            .frame(width: 33, height: 33)
     }
 }
+
+// ── Lightbulb (9 cols × 12 rows) ───────────────────────────────────────────
+private let bulbPixels: [[Int]] = [
+    [0,0,1,1,1,1,1,0,0],  // top of bulb
+    [0,1,1,0,0,0,1,1,0],
+    [1,1,0,0,0,0,0,1,1],
+    [1,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,1],
+    [1,1,0,0,0,0,0,1,1],
+    [0,1,1,1,1,1,1,1,0],  // base of bulb dome
+    [0,0,1,1,1,1,1,0,0],  // collar
+    [0,0,0,1,1,1,0,0,0],  // neck
+    [0,0,2,2,2,2,2,0,0],  // red base
+    [0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0],
+]
 
 struct BulbPixelIcon: View {
     var body: some View {
-        VStack(spacing: 1) {
-            Circle().stroke(pixelWhite, lineWidth: 2).frame(width: 16, height: 16)
-            Rectangle().fill(pixelWhite).frame(width: 8, height: 3)
-            Circle().fill(pixelRed).frame(width: 5, height: 5)
-        }
-        .frame(width: 28, height: 28)
+        PixelSprite(pixels: bulbPixels, pixelSize: 3)
+            .frame(width: 27, height: 36)
     }
 }
+
+// ── Shopping Bag (9 cols × 11 rows) ────────────────────────────────────────
+// Handle = red U-shape pixels; body = bordered rectangle
+private let bagPixels: [[Int]] = [
+    [0,0,2,2,0,2,2,0,0],  // handle top
+    [0,0,2,0,0,0,2,0,0],  // handle sides
+    [0,0,2,0,0,0,2,0,0],
+    [1,1,1,1,1,1,1,1,1],  // bag top border
+    [1,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,1],
+    [1,1,1,1,1,1,1,1,1],  // bag bottom border
+    [0,0,0,0,0,0,0,0,0],
+]
 
 struct BagPixelIcon: View {
     var body: some View {
-        VStack(spacing: 0) {
-            Path { p in
-                p.addArc(center: .init(x: 10, y: 5), radius: 6,
-                         startAngle: .degrees(180), endAngle: .degrees(0), clockwise: false)
-            }
-            .stroke(pixelRed, lineWidth: 2)
-            .frame(width: 20, height: 6)
-            Rectangle().stroke(pixelWhite, lineWidth: 2).frame(width: 22, height: 16)
-        }
-        .frame(width: 28, height: 28)
+        PixelSprite(pixels: bagPixels, pixelSize: 3)
+            .frame(width: 27, height: 33)
     }
 }
 
+// ── Bottom Brand Badge (13×13 pixel ring with blue 2×2 squares) ────────────
+// Computed once at launch via a stored property closure
+private let brandBadgePixels: [[Int]] = {
+    let G = 13, cx = 6, cy = 6, R = 6
+    var g = Array(repeating: Array(repeating: 0, count: G), count: G)
+    // Pixel ring border
+    for row in 0..<G { for col in 0..<G {
+        let dx = col-cx, dy = row-cy, d = dx*dx + dy*dy
+        if d >= (R-1)*(R-1) && d <= R*R { g[row][col] = 1 }
+    }}
+    // 4 blue squares (2×2 each) at the four quadrant centres
+    for (r,c) in [(3,3),(3,8),(8,3),(8,8)] {
+        g[r][c]=3; g[r][c+1]=3; g[r+1][c]=3; g[r+1][c+1]=3
+    }
+    return g
+}()
+
 struct BottomBrandBadge: View {
     var body: some View {
-        ZStack {
-            Circle().stroke(pixelWhite.opacity(0.35), lineWidth: 2).frame(width: 52, height: 52)
-            VStack(spacing: 3) {
-                HStack(spacing: 3) {
-                    brandSquare; brandSquare
-                }
-                HStack(spacing: 3) {
-                    brandSquare; brandSquare
-                }
-            }
-        }
-    }
-    var brandSquare: some View {
-        Rectangle().fill(pixelBlue).frame(width: 9, height: 9)
+        PixelSprite(pixels: brandBadgePixels, pixelSize: 4)
+            .frame(width: 52, height: 52)
     }
 }
