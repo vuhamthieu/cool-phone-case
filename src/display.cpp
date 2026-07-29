@@ -195,3 +195,117 @@ void drawLowBatteryScreen(bool blinkState) {
         drawTextCentered(58, "PLEASE CHARGE");
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// renderActivity()
+//
+// Layout on 128×64 OLED (1-bit, u8g2):
+//
+//  ┌────────────────────────────────────────────────────────────────┐
+//  │ ACTIVITY                                                       │  row y=10
+//  │ [shoe] STEPS                            12,345                 │  row y=24
+//  │ [heart] BPM                             72                     │  row y=38
+//  │ [flame] CAL                             420 kcal               │  row y=52
+//  └────────────────────────────────────────────────────────────────┘
+//
+// All bitmaps are 10×10 1-bit XBM patterns drawn inline.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// 10×10 pixel-art shoe icon (XBM format, LSB first, row-major)
+static const uint8_t SHOE_ICON[] PROGMEM = {
+    // Each byte represents 8 horizontal pixels (left to right, LSB = leftmost)
+    // Row 0-9:  (10 px wide → 2 bytes per row, second byte only uses low 2 bits)
+    0x00, 0x00,   // ..........
+    0x78, 0x00,   // .####.....
+    0x7C, 0x00,   // .#####....
+    0xFE, 0x01,   // .#######..  (bit8 = col 8)  → ##.......
+    0xFE, 0x03,   // ########## 
+    0xFE, 0x03,   // ##########
+    0xFF, 0x03,   // ##########
+    0xFE, 0x03,   // ##########
+    0x00, 0x00,
+    0x00, 0x00,
+};
+
+// 10×10 pixel-art heart icon (XBM format, LSB first)
+static const uint8_t HEART_ICON[] PROGMEM = {
+    0x00, 0x00,
+    0x66, 0x00,   // .##..##...
+    0xFF, 0x01,   // #########.
+    0xFF, 0x01,   // #########.
+    0xFF, 0x01,   // #########.
+    0xFE, 0x00,   // .########.
+    0xFC, 0x00,   // ..#######.
+    0xF8, 0x00,   // ...######.
+    0x70, 0x00,   // ....####..
+    0x20, 0x00,   // .....##...
+};
+
+// 10×10 pixel-art flame icon (XBM format, LSB first)
+static const uint8_t FLAME_ICON[] PROGMEM = {
+    0x10, 0x00,   // ...#......
+    0x38, 0x00,   // ..###.....
+    0x7C, 0x00,   // .#####....
+    0xFC, 0x00,   // ######....
+    0xFE, 0x00,   // #######...
+    0xEE, 0x00,   // ###.###...
+    0xFE, 0x00,   // #######...
+    0xFC, 0x00,   // ######....
+    0x78, 0x00,   // .####.....
+    0x30, 0x00,   // ..##......
+};
+
+void renderActivity(uint32_t steps, uint16_t bpm, uint16_t calories) {
+    char buf[24];
+
+    // ── Title row ──────────────────────────────────────────────────────────
+    u8g2.setFont(u8g2_font_5x7_tf);
+    u8g2.drawStr(0, 9, "ACTIVITY");
+
+    // Horizontal separator under title
+    u8g2.drawHLine(0, 12, 128);
+
+    // ── Row helper lambda: icon + label (left) + value (right-aligned) ─────
+    // Row 1: Steps (shoe icon at x=0, y=14 → icon is 10 tall so fits to y=24)
+    u8g2.drawXBMP(0, 14, 10, 10, SHOE_ICON);
+    u8g2.setFont(u8g2_font_5x7_tf);
+    u8g2.drawStr(13, 23, "STEPS");
+    // Right-align value
+    snprintf(buf, sizeof(buf), "%lu", (unsigned long)steps);
+    {
+        int w = u8g2.getStrWidth(buf);
+        u8g2.drawStr(128 - w, 23, buf);
+    }
+
+    // Thin separator
+    u8g2.drawHLine(0, 26, 128);
+
+    // ── Row 2: Heart Rate ───────────────────────────────────────────────────
+    u8g2.drawXBMP(0, 28, 10, 10, HEART_ICON);
+    u8g2.drawStr(13, 37, "BPM");
+    snprintf(buf, sizeof(buf), "%u", bpm);
+    {
+        int w = u8g2.getStrWidth(buf);
+        u8g2.drawStr(128 - w, 37, buf);
+    }
+
+    u8g2.drawHLine(0, 40, 128);
+
+    // ── Row 3: Calories ─────────────────────────────────────────────────────
+    u8g2.drawXBMP(0, 42, 10, 10, FLAME_ICON);
+    u8g2.drawStr(13, 51, "KCAL");
+    snprintf(buf, sizeof(buf), "%u", calories);
+    {
+        int w = u8g2.getStrWidth(buf);
+        u8g2.drawStr(128 - w, 51, buf);
+    }
+
+    u8g2.drawHLine(0, 54, 128);
+
+    // ── Footer: "LIVE" badge if we have non-zero data ─────────────────────
+    if (steps > 0 || bpm > 0) {
+        u8g2.drawStr(0, 63, "* iOS LIVE");
+    } else {
+        u8g2.drawStr(0, 63, "waiting...");
+    }
+}

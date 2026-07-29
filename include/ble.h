@@ -2,7 +2,6 @@
 #pragma once
 #include <Arduino.h>
 
-
 // Initialize the BLE device, services, and characteristics
 void bleInit();
 

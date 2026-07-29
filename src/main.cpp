@@ -19,6 +19,11 @@ volatile bool modeChangedFlag = false;
 volatile bool touchTriggeredFlag = false;
 bool timeSynced = false;
 
+// Activity Data (received from iOS HealthKit via BLE; default 0 until first write)
+volatile uint32_t activitySteps    = 0;
+volatile uint16_t activityBPM      = 0;
+volatile uint16_t activityCalories = 0;
+
 // Battery & Multitasking States
 volatile bool isLowBattery = false;
 SemaphoreHandle_t displayMutex = NULL;
@@ -26,6 +31,7 @@ SemaphoreHandle_t displayMutex = NULL;
 // Camera Frame Cache
 uint8_t cachedCameraFrame[1024];
 bool hasCachedFrame = false;
+
 
 // Task functions
 void Task1_UDP_Display(void* pvParameters);
@@ -278,6 +284,21 @@ void Task2_General(void* pvParameters) {
                 case MODE_CAMERA:
                     // Task 1 handles camera rendering, so Task 2 yields
                     vTaskDelay(pdMS_TO_TICKS(50));
+                    break;
+
+                case MODE_ACTIVITY:
+                    if (xSemaphoreTake(displayMutex, portMAX_DELAY) == pdTRUE) {
+                        displayClear();
+                        // Snapshot volatiles once to avoid tearing between reads
+                        renderActivity(
+                            (uint32_t)activitySteps,
+                            (uint16_t)activityBPM,
+                            (uint16_t)activityCalories
+                        );
+                        displayUpdate();
+                        xSemaphoreGive(displayMutex);
+                    }
+                    vTaskDelay(pdMS_TO_TICKS(2000)); // Refresh every 2 s (data rarely changes)
                     break;
             }
         }

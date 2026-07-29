@@ -422,13 +422,22 @@ struct FacesView: View {
                 Spacer()
                 Button {
                     healthKit.fetchAllMetrics()
+                    // After a short delay so queries return, push data over BLE
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        bleManager.sendActivityData(
+                            steps:    UInt32(healthKit.stepCount),
+                            bpm:      UInt16(healthKit.heartRate),
+                            calories: UInt16(healthKit.activeCalories)
+                        )
+                    }
                 } label: {
-                    PixelText("REFRESH", size: 6, color: pixelBlack)
+                    PixelText("SYNC TO OLED", size: 6, color: pixelBlack)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
                         .background(pixelWhite)
                 }
             }
+
 
             if !healthKit.isAuthorized {
                 Button {
