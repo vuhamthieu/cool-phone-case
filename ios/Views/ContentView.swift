@@ -77,7 +77,6 @@ struct HomeView: View {
                         .foregroundColor(.white)
                 }
                 .font(.system(size: 28, weight: .black, design: .monospaced))
-                .kerning(2)
                 .padding(.top, 24)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 
@@ -1015,7 +1014,6 @@ struct RetroClockPreviewView: View {
                 Text(timeString)
                     .font(.system(size: 34, weight: .black, design: .monospaced))
                     .foregroundColor(.white)
-                    .kerning(1)
                 
                 Text(secondString)
                     .font(.system(size: 14, weight: .bold, design: .monospaced))
