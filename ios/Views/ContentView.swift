@@ -1,1745 +1,1071 @@
 import SwiftUI
 import WebKit
+import AVFoundation
+
+// MARK: - Navigation State
 
 enum ActiveScreen {
-    case home
-    case faces
-    case videoStream
-    case tiles
-    case settings
-    case tips
-    case store
+    case home, faces, videoStream, tiles, settings, tips, store
 }
+
+// MARK: - Pixel Font Helper
+
+private let pixelFont = "PressStart2P-Regular"
+private func pFont(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+    .custom(pixelFont, size: size)
+}
+
+// MARK: - Pixel Colors
+
+private let pixelBlue   = Color(red: 31/255, green: 105/255, blue: 255/255)
+private let pixelRed    = Color.red
+private let pixelWhite  = Color.white
+private let pixelGray   = Color(white: 0.45)
+private let pixelBlack  = Color.black
+
+// MARK: - ContentView Root
 
 struct ContentView: View {
     @EnvironmentObject var bleManager: BLEManager
     @State private var activeScreen: ActiveScreen = .home
-    
-    // Core customization states
-    @State private var selectedClockStyle = 1 // 1: Analog default
-    @State private var selectedEmote = 0      // 0: Idle, 1: What, 2: Judging, 3: Happy, 4: Angry
-    @State private var lastSyncedTimeText = "Never"
-    
-    // Persistent streaming manager
+    @State private var selectedClockStyle: Int = 0   // 0=Big Digital, 1=Digital Date, 2=Analog
+    @State private var selectedEmoteIndex: Int = 0
+
     @StateObject private var cameraManager = CameraManager()
-    @StateObject private var udpStreamer = UDPStreamer()
-    @State private var isCameraStreaming = false
-    
+    @StateObject private var udpStreamer   = UDPStreamer()
+    @StateObject private var healthKit     = HealthKitManager()
+    @State private var isCameraStreaming   = false
+
     var body: some View {
-        NavigationView {
-            ZStack {
-                // Background pure black
-                Color.black.ignoresSafeArea()
-                
-                VStack(spacing: 0) {
-                    Group {
-                        switch activeScreen {
-                        case .home:
-                            HomeView(activeScreen: $activeScreen, selectedClockStyle: $selectedClockStyle, selectedEmote: $selectedEmote, lastSyncedTimeText: $lastSyncedTimeText)
-                        case .faces:
-                            FacesView(activeScreen: $activeScreen, selectedClockStyle: $selectedClockStyle, selectedEmote: $selectedEmote)
-                        case .videoStream:
-                            CameraView(activeScreen: $activeScreen, isCameraStreaming: $isCameraStreaming, cameraManager: cameraManager, udpStreamer: udpStreamer)
-                        case .tiles:
-                            TilesView(activeScreen: $activeScreen)
-                        case .settings:
-                            SettingsView(activeScreen: $activeScreen)
-                        case .tips:
-                            TipsView(activeScreen: $activeScreen)
-                        case .store:
-                            StoreView(activeScreen: $activeScreen)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.horizontal, 16)
-                }
+        ZStack {
+            pixelBlack.ignoresSafeArea()
+
+            switch activeScreen {
+            case .home:
+                HomeView(activeScreen: $activeScreen)
+            case .faces:
+                FacesView(
+                    activeScreen: $activeScreen,
+                    selectedClockStyle: $selectedClockStyle,
+                    selectedEmoteIndex: $selectedEmoteIndex,
+                    healthKit: healthKit
+                )
+            case .videoStream:
+                CameraView(
+                    activeScreen: $activeScreen,
+                    isCameraStreaming: $isCameraStreaming,
+                    cameraManager: cameraManager,
+                    udpStreamer: udpStreamer
+                )
+            case .tiles:   SimplePage(title: "TILES",    icon: "square.grid.2x2", activeScreen: $activeScreen)
+            case .settings: SettingsPage(activeScreen: $activeScreen)
+            case .tips:    SimplePage(title: "USER GUIDE", icon: "lightbulb", activeScreen: $activeScreen)
+            case .store:   SimplePage(title: "STORE",    icon: "bag",         activeScreen: $activeScreen)
             }
-            .navigationBarHidden(true)
         }
-        .onChange(of: isCameraStreaming) { streaming in
-            if streaming {
-                cameraManager.onFrameCaptured = { pixelBuffer in
-                    udpStreamer.streamFrame(pixelBuffer)
-                }
-                udpStreamer.start()
-                cameraManager.start()
+        .onChange(of: isCameraStreaming) { on in
+            if on {
+                cameraManager.onFrameCaptured = { udpStreamer.streamFrame($0) }
+                udpStreamer.start(); cameraManager.start()
             } else {
-                cameraManager.stop()
-                udpStreamer.stop()
+                cameraManager.stop(); udpStreamer.stop()
             }
+        }
+        .onAppear {
+            healthKit.requestAuthorization { _ in }
         }
     }
 }
 
-// MARK: - Tab Views
+// MARK: - Home View
 
 struct HomeView: View {
     @EnvironmentObject var bleManager: BLEManager
     @Binding var activeScreen: ActiveScreen
-    @Binding var selectedClockStyle: Int
-    @Binding var selectedEmote: Int
-    @Binding var lastSyncedTimeText: String
-    
+
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: 24) {
-                // Header Bar
+            VStack(alignment: .leading, spacing: 0) {
+
+                // ── Logo ──────────────────────────────────────────────────────
                 HStack(spacing: 0) {
-                    Text("OVER")
-                        .foregroundColor(.white)
-                    Text("B")
-                        .foregroundColor(.red)
-                    Text("YTE")
-                        .foregroundColor(.white)
+                    PixelText("OVER", size: 26, color: pixelWhite)
+                    PixelText("B",    size: 26, color: pixelRed)
+                    PixelText("YTE",  size: 26, color: pixelWhite)
                 }
-                .font(.system(size: 32, weight: .black, design: .monospaced))
-                .padding(.top, 24)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                
-                // Status description
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.top, 52)
+                .padding(.bottom, 16)
+
+                // ── Status ────────────────────────────────────────────────────
+                PixelText(
+                    bleManager.isConnected
+                        ? "Your watch is connected."
+                        : "Your watch isn't connected to your phone.",
+                    size: 8,
+                    color: pixelGray
+                )
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 28)
+
+                // ── Connect / Disconnect button ───────────────────────────────
+                Button {
+                    bleManager.isConnected ? bleManager.disconnect() : bleManager.startScanning()
+                } label: {
+                    PixelText(
+                        bleManager.isConnected ? "DISCONNECT" : "CONNECT",
+                        size: 12,
+                        color: pixelBlack
+                    )
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 18)
+                    .background(bleManager.isConnected ? pixelRed : pixelBlue)
+                }
+                .padding(.horizontal, 40)
+                .padding(.bottom, 36)
+
+                // ── Search row ────────────────────────────────────────────────
                 HStack {
-                    Text(bleManager.isConnected ? "CONNECTED" : "DISCONNECTED")
-                        .font(.system(size: 14, weight: .bold, design: .monospaced))
-                        .foregroundColor(bleManager.isConnected ? .blue : .red)
                     Spacer()
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(pixelWhite)
+                        .font(.system(size: 22, weight: .bold))
                 }
-                
-                // CONNECT/DISCONNECT button
-                HStack {
-                    Button(action: {
-                        if bleManager.isConnected {
-                            bleManager.disconnect()
-                        } else {
-                            bleManager.startScanning()
-                        }
-                    }) {
-                        Text(bleManager.isConnected ? "DISCONNECT" : "CONNECT")
-                            .font(.system(size: 13, weight: .bold, design: .monospaced))
-                            .foregroundColor(.black)
-                            .padding(.vertical, 10)
-                            .padding(.horizontal, 32)
-                            .background(bleManager.isConnected ? Color.red : Color(red: 31/255, green: 105/255, blue: 255/255))
-                            .border(Color.white, width: 2)
-                    }
-                    Spacer()
-                }
-                
-                // Discovered list if searching and not connected
-                if !bleManager.isConnected && !bleManager.discoveredPeripherals.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("DISCOVERED DEVIATION:")
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundColor(.white)
-                        
-                        ForEach(bleManager.discoveredPeripherals, id: \.identifier) { device in
-                            Button(action: {
-                                bleManager.connect(to: device)
-                            }) {
-                                HStack {
-                                    Image(systemName: "candybarphone")
-                                    Text((device.name ?? "UNKNOWN DEVICE").uppercased())
-                                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                }
-                                .foregroundColor(.white)
-                                .padding(12)
-                                .border(Color.white.opacity(0.3), width: 1.5)
-                            }
-                        }
-                    }
-                    .padding(.top, 8)
-                }
-                
-                // Options Box 1: Faces, Video Stream, Tiles
-                HStack(spacing: 0) {
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.15)) {
+                .padding(.horizontal, 16)
+                .padding(.bottom, 10)
+
+                // ── Primary nav grid (FACES | VIDEO STREAM | TILES) ───────────
+                PixelBorderBox {
+                    HStack(spacing: 0) {
+                        NavCell(icon: AnyView(RobotFaceIcon(size: 42)), label: "FACES") {
                             activeScreen = .faces
                         }
-                    }) {
-                        VStack(spacing: 12) {
-                            RobotFaceIcon()
-                            Text("FACES")
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundColor(.white)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .contentShape(Rectangle())
-                    }
-                    
-                    Rectangle()
-                        .fill(Color.white)
-                        .frame(width: 2)
-                        .padding(.vertical, 8)
-                    
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.15)) {
+                        PixelDivider(axis: .vertical)
+                        NavCell(icon: AnyView(CameraPixelIcon(size: 42)), label: "VIDEO STREAM") {
                             activeScreen = .videoStream
                         }
-                    }) {
-                        VStack(spacing: 12) {
-                            CameraIcon()
-                            Text("VIDEO STREAM")
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundColor(.white)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .contentShape(Rectangle())
-                    }
-                    
-                    Rectangle()
-                        .fill(Color.white)
-                        .frame(width: 2)
-                        .padding(.vertical, 8)
-                    
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.15)) {
+                        PixelDivider(axis: .vertical)
+                        NavCell(icon: AnyView(GridPixelIcon(size: 42)), label: "TILES") {
                             activeScreen = .tiles
                         }
-                    }) {
-                        VStack(spacing: 12) {
-                            TilesIcon()
-                            Text("TILES")
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundColor(.white)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .contentShape(Rectangle())
                     }
                 }
-                .padding(.vertical, 20)
-                .background(Color.black)
-                .border(Color.white, width: 2)
-                
-                // Options Box 2: Setting, Tips and User Guide, Store
-                VStack(spacing: 0) {
-                    // Setting
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            activeScreen = .settings
-                        }
-                    }) {
-                        HStack(spacing: 16) {
-                            GearIcon()
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("SETTING")
-                                    .font(.system(size: 13, weight: .bold, design: .monospaced))
-                                    .foregroundColor(.white)
-                                Text("NOTIFICATIONS • DISPLAY • HEALTH")
-                                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                    .foregroundColor(.gray)
-                            }
-                            Spacer()
-                        }
-                        .padding(.vertical, 16)
-                        .padding(.horizontal, 16)
-                        .contentShape(Rectangle())
-                    }
-                    
-                    Rectangle()
-                        .fill(Color.white)
-                        .frame(height: 2)
-                    
-                    // Tips and User Guide
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            activeScreen = .tips
-                        }
-                    }) {
-                        HStack(spacing: 16) {
-                            LightbulbIcon()
-                            Text("TIPS AND USER GUIDE")
-                                .font(.system(size: 13, weight: .bold, design: .monospaced))
-                                .foregroundColor(.white)
-                            Spacer()
-                        }
-                        .padding(.vertical, 16)
-                        .padding(.horizontal, 16)
-                        .contentShape(Rectangle())
-                    }
-                    
-                    Rectangle()
-                        .fill(Color.white)
-                        .frame(height: 2)
-                    
-                    // Store
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            activeScreen = .store
-                        }
-                    }) {
-                        HStack(spacing: 16) {
-                            BagIcon()
-                            Text("STORE")
-                                .font(.system(size: 13, weight: .bold, design: .monospaced))
-                                .foregroundColor(.white)
-                            Spacer()
-                        }
-                        .padding(.vertical, 16)
-                        .padding(.horizontal, 16)
-                        .contentShape(Rectangle())
+                .padding(.horizontal, 16)
+                .padding(.bottom, 14)
+
+                // ── Secondary nav list (Settings / Tips / Store) ──────────────
+                PixelBorderBox {
+                    VStack(spacing: 0) {
+                        ListNavRow(
+                            icon: AnyView(GearPixelIcon()),
+                            title: "SETTING",
+                            subtitle: "NOTIFICATIONS • DISPLAY • HEALTH"
+                        ) { activeScreen = .settings }
+                        PixelDivider(axis: .horizontal)
+                        ListNavRow(
+                            icon: AnyView(BulbPixelIcon()),
+                            title: "TIPS AND USER GUIDE"
+                        ) { activeScreen = .tips }
+                        PixelDivider(axis: .horizontal)
+                        ListNavRow(
+                            icon: AnyView(BagPixelIcon()),
+                            title: "STORE"
+                        ) { activeScreen = .store }
                     }
                 }
-                .background(Color.black)
-                .border(Color.white, width: 2)
-                
-                Spacer(minLength: 24)
-                
-                BottomBrandingIcon()
+                .padding(.horizontal, 16)
+                .padding(.bottom, 32)
+
+                // ── Bottom branding ───────────────────────────────────────────
+                HStack {
+                    Spacer()
+                    BottomBrandBadge()
+                    Spacer()
+                }
+                .padding(.bottom, 24)
             }
-            .padding(.bottom, 8)
         }
+        .background(pixelBlack)
     }
 }
+
+// MARK: - Faces View
 
 struct FacesView: View {
     @EnvironmentObject var bleManager: BLEManager
     @Binding var activeScreen: ActiveScreen
     @Binding var selectedClockStyle: Int
-    @Binding var selectedEmote: Int
-    
-    // Category tabs: 0 = CLOCK, 1 = EMOTE, 2 = ACTIVITY
-    @State private var selectedFaceCategory = 0
-    
+    @Binding var selectedEmoteIndex: Int
+    @ObservedObject var healthKit: HealthKitManager
+
+    // 0 = CLOCK, 1 = EMOTE, 2 = ACTIVITY
+    @State private var faceCategory: Int = 0
+
+    // Clock faces available on the ESP32 (mapped to display.cpp styles)
+    private let clockFaces: [(label: String, style: Int)] = [
+        ("BIG DIGITAL", 0),
+        ("DIGITAL DATE", 1),
+        ("ANALOG",       2),
+    ]
+
+    // Emote faces with associated GIF filenames
+    private let emoteFaces: [(label: String, gif: String)] = [
+        ("IDLE",    "default"),
+        ("WHAT",    "what"),
+        ("JUDGING", "juding"),
+        ("HAPPY",   "happy"),
+        ("ANGRY",   "angry"),
+    ]
+
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: 20) {
-                // Header Bar with Back Button
-                HStack {
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            activeScreen = .home
-                        }
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 18, weight: .bold))
-                            Text("FACES")
-                                .font(.system(size: 18, weight: .bold, design: .monospaced))
-                        }
-                        .foregroundColor(.white)
-                    }
-                    Spacer()
-                }
-                .padding(.top, 16)
-                
-                // Live OLED Preview Frame (Aspect ratio 2:1, strict 8-bit black & white)
-                ZStack {
-                    Color.black
-                    
-                    // Viewfinder corners
-                    PreviewViewfinder()
-                    
-                    if selectedFaceCategory == 0 {
-                        OledClockPreviewView(style: selectedClockStyle, isConnected: bleManager.isConnected)
-                    } else if selectedFaceCategory == 1 {
-                        EmotePreviewContainer(emotionIndex: selectedEmote)
-                    } else if selectedFaceCategory == 2 {
-                        OledActivityPreviewView(batteryLevel: bleManager.batteryLevel)
+        VStack(spacing: 0) {
+
+            // ── Back header ────────────────────────────────────────────────
+            HStack {
+                Button {
+                    activeScreen = .home
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16, weight: .black))
+                            .foregroundColor(pixelWhite)
+                        PixelText("FACES", size: 14, color: pixelWhite)
                     }
                 }
-                .frame(height: 180)
-                .border(Color.white, width: 2)
-                .padding(.top, 8)
-                
-                // Category tabs (CLOCK, EMOTE, ACTIVITY) - 8-bit selection bar
-                HStack(spacing: 0) {
-                    Button(action: { selectedFaceCategory = 0 }) {
-                        Text("CLOCK")
-                            .font(.system(size: 12, weight: .bold, design: .monospaced))
-                            .foregroundColor(selectedFaceCategory == 0 ? .black : .white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(selectedFaceCategory == 0 ? Color.white : Color.black)
-                    }
-                    
-                    Rectangle()
-                        .fill(Color.white)
-                        .frame(width: 2)
-                    
-                    Button(action: { selectedFaceCategory = 1 }) {
-                        Text("EMOTE")
-                            .font(.system(size: 12, weight: .bold, design: .monospaced))
-                            .foregroundColor(selectedFaceCategory == 1 ? .black : .white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(selectedFaceCategory == 1 ? Color.white : Color.black)
-                    }
-                    
-                    Rectangle()
-                        .fill(Color.white)
-                        .frame(width: 2)
-                    
-                    Button(action: { selectedFaceCategory = 2 }) {
-                        Text("ACTIVITY")
-                            .font(.system(size: 12, weight: .bold, design: .monospaced))
-                            .foregroundColor(selectedFaceCategory == 2 ? .black : .white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(selectedFaceCategory == 2 ? Color.white : Color.black)
-                    }
-                }
-                .border(Color.white, width: 2)
-                .padding(.top, 16)
-                
-                // Sub-items based on Category selection
-                Group {
-                    if selectedFaceCategory == 0 {
-                        // Clock Styles
-                        VStack(spacing: 12) {
-                            ForEach(0..<3, id: \.self) { styleIdx in
-                                Button(action: {
-                                    selectedClockStyle = styleIdx
-                                    if bleManager.isConnected {
-                                        bleManager.sendMode(0)
-                                    }
-                                }) {
-                                    HStack {
-                                        Text(clockStyleName(styleIdx))
-                                            .font(.system(size: 13, weight: .bold, design: .monospaced))
-                                            .foregroundColor(.white)
-                                        Spacer()
-                                        if selectedClockStyle == styleIdx {
-                                            Text("[ SELECTED ]")
-                                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                                .foregroundColor(.blue)
-                                        }
-                                    }
-                                    .padding()
-                                    .border(selectedClockStyle == styleIdx ? Color.white : Color.white.opacity(0.15), width: 1.5)
-                                }
-                            }
-                        }
-                    } else if selectedFaceCategory == 1 {
-                        // Emote Styles
-                        VStack(spacing: 12) {
-                            ForEach(0..<5, id: \.self) { emoteIdx in
-                                Button(action: {
-                                    selectedEmote = emoteIdx
-                                    if bleManager.isConnected {
-                                        bleManager.sendMode(1)
-                                    }
-                                }) {
-                                    HStack {
-                                        Text(emoteName(emoteIdx))
-                                            .font(.system(size: 13, weight: .bold, design: .monospaced))
-                                            .foregroundColor(.white)
-                                        Spacer()
-                                        if selectedEmote == emoteIdx {
-                                            Text("[ ACTIVE ]")
-                                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                                .foregroundColor(.red)
-                                        }
-                                    }
-                                    .padding()
-                                    .border(selectedEmote == emoteIdx ? Color.white : Color.white.opacity(0.15), width: 1.5)
-                                }
-                            }
-                        }
-                    } else if selectedFaceCategory == 2 {
-                        // Activity summary & Sync
-                        VStack(spacing: 16) {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text("APPLE HEALTH SYNC STATUS")
-                                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                        .foregroundColor(.gray)
-                                    Text("Activity steps and heart rate synced to watch face.")
-                                        .font(.system(size: 11, design: .monospaced))
-                                        .foregroundColor(.white)
-                                }
-                                Spacer()
-                            }
-                            .padding()
-                            .border(Color.white.opacity(0.15), width: 1.5)
-                            
-                            Button(action: {
-                                if bleManager.isConnected {
-                                    bleManager.syncTime()
-                                }
-                            }) {
-                                Text("FORCE SYNC")
-                                    .font(.system(size: 12, weight: .bold, design: .monospaced))
-                                    .foregroundColor(.black)
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(Color.white)
-                                    .border(Color.white, width: 2)
-                            }
-                        }
-                    }
-                }
-                .padding(.top, 16)
-                
-                Spacer(minLength: 24)
-                
-                BottomBrandingIcon()
+                Spacer()
             }
-            .padding(.bottom, 8)
-        }
-    }
-    
-    private func clockStyleName(_ index: Int) -> String {
-        switch index {
-        case 0: return "BIG DIGITAL"
-        case 1: return "DIGITAL DATE"
-        case 2: return "ANALOG CLOCK"
-        default: return "CLOCK"
-        }
-    }
-    
-    private func emoteName(_ index: Int) -> String {
-        switch index {
-        case 0: return "IDLE FACE"
-        case 1: return "WHAT FACE"
-        case 2: return "JUDGING FACE"
-        case 3: return "HAPPY FACE"
-        case 4: return "ANGRY FACE"
-        default: return "EMOTE"
-        }
-    }
-}
+            .padding(.horizontal, 16)
+            .padding(.top, 56)
+            .padding(.bottom, 20)
 
-// MARK: - u8g2 OLED style rendering views
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 20) {
 
-struct OledClockPreviewView: View {
-    let style: Int
-    let isConnected: Bool
-    @State private var currentDate = Date()
-    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-    
-    var body: some View {
-        ZStack {
-            Color.black
-            
-            switch style {
-            case 0: // CLOCK_BIG_DIGITAL
-                VStack(spacing: 2) {
-                    HStack(alignment: .firstTextBaseline, spacing: 2) {
-                        Text(timeString(from: currentDate, format: "HH:mm"))
-                            .font(.system(size: 36, weight: .bold, design: .monospaced))
-                            .foregroundColor(.white)
-                        Text(timeString(from: currentDate, format: ":ss"))
-                            .font(.system(size: 14, weight: .bold, design: .monospaced))
-                            .foregroundColor(.white)
-                    }
-                    HStack {
-                        Text(isConnected ? "BLE OK" : "NO SYNC")
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundColor(.white)
-                        Spacer()
+                    // ── OLED Preview section ───────────────────────────────────
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 16) {
+                            // Left: live OLED render
+                            ZStack {
+                                pixelBlack
+                                switch faceCategory {
+                                case 0: OLEDClockPreview(style: selectedClockStyle)
+                                case 1: OLEDEmotePreview(gifName: emoteFaces[selectedEmoteIndex].gif)
+                                default: OLEDActivityPreview(healthKit: healthKit)
+                                }
+                            }
+                            .frame(width: 148, height: 148)
+                            .border(pixelWhite, width: 2)
+
+                            // Right: title + info
+                            VStack(alignment: .leading, spacing: 10) {
+                                PixelText(selectedFaceTitle, size: 9, color: pixelWhite)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                if faceCategory == 0 {
+                                    PixelText("Clock Face", size: 7, color: pixelGray)
+                                    PixelText("u8g2 render", size: 7, color: pixelGray)
+                                } else if faceCategory == 1 {
+                                    PixelText("Animated", size: 7, color: pixelGray)
+                                    PixelText("GIF Emote", size: 7, color: pixelGray)
+                                } else {
+                                    PixelText("HealthKit", size: 7, color: pixelGray)
+                                    PixelText("Activity", size: 7, color: pixelGray)
+                                }
+                            }
+                            Spacer()
+                        }
+                        .padding(12)
+                        .background(pixelBlack)
+                        .border(pixelWhite, width: 2)
                     }
                     .padding(.horizontal, 16)
-                }
-                
-            case 1: // CLOCK_DIGITAL_DATE
-                VStack(spacing: 6) {
-                    Text(timeString(from: currentDate, format: "HH:mm:ss"))
-                        .font(.system(size: 24, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white)
-                    
-                    Text(dateString(from: currentDate, format: "EEEE, MMM dd"))
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundColor(.white)
-                }
-                
-            case 2: // CLOCK_ANALOG
-                HStack(spacing: 16) {
-                    // Analog clock face on the left
-                    ZStack {
-                        Circle()
-                            .stroke(Color.white, lineWidth: 2)
-                            .frame(width: 52, height: 52)
-                        
-                        // Center dot
-                        Circle()
-                            .fill(Color.white)
-                            .frame(width: 3, height: 3)
-                        
-                        // Hands
-                        AnalogClockHands(date: currentDate)
-                    }
-                    .frame(width: 52, height: 52)
-                    
-                    // Digital clock read on the right
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(alignment: .firstTextBaseline, spacing: 2) {
-                            Text(timeString(from: currentDate, format: "HH:mm"))
-                                .font(.system(size: 16, weight: .bold, design: .monospaced))
-                                .foregroundColor(.white)
-                            Text(timeString(from: currentDate, format: ":ss"))
-                                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                .foregroundColor(.white)
+
+                    // ── Category tabs ─────────────────────────────────────────
+                    HStack(spacing: 0) {
+                        ForEach(Array(["CLOCK","EMOTE","ACTIVITY"].enumerated()), id: \.offset) { idx, name in
+                            Button {
+                                withAnimation(.none) { faceCategory = idx }
+                            } label: {
+                                PixelText(name, size: 8, color: faceCategory == idx ? pixelBlack : pixelWhite)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(faceCategory == idx ? pixelWhite : pixelBlack)
+                            }
+                            if idx < 2 {
+                                Rectangle().fill(pixelWhite).frame(width: 2)
+                            }
                         }
-                        
-                        Text(dateString(from: currentDate, format: "dd/MM"))
-                            .font(.system(size: 10, weight: .medium, design: .monospaced))
-                            .foregroundColor(.white)
+                    }
+                    .border(pixelWhite, width: 2)
+                    .padding(.horizontal, 16)
+
+                    // ── Category content ──────────────────────────────────────
+                    Group {
+                        switch faceCategory {
+                        case 0: clockSection
+                        case 1: emoteSection
+                        default: activitySection
+                        }
+                    }
+                    .padding(.horizontal, 16)
+
+                    // ── Bottom branding ───────────────────────────────────────
+                    HStack {
+                        Spacer()
+                        BottomBrandBadge()
+                        Spacer()
+                    }
+                    .padding(.bottom, 24)
+                }
+                .padding(.top, 4)
+            }
+        }
+        .background(pixelBlack)
+    }
+
+    // MARK: - Section builders
+
+    private var clockSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                PixelText("CLOCK", size: 8, color: pixelGray)
+                Spacer()
+                // SYNC TIME button
+                Button {
+                    bleManager.syncTime()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "clock.arrow.2.circlepath")
+                            .font(.system(size: 10, weight: .black))
+                        PixelText("SYNC TIME", size: 6, color: pixelBlack)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(pixelWhite)
+                }
+                .disabled(!bleManager.isConnected)
+                .opacity(bleManager.isConnected ? 1.0 : 0.4)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(clockFaces, id: \.style) { face in
+                        Button {
+                            selectedClockStyle = face.style
+                            if bleManager.isConnected { bleManager.sendMode(0) }
+                        } label: {
+                            VStack(spacing: 8) {
+                                ZStack {
+                                    pixelBlack
+                                    OLEDClockPreview(style: face.style)
+                                }
+                                .frame(width: 110, height: 90)
+                                .border(
+                                    selectedClockStyle == face.style ? pixelBlue : pixelWhite.opacity(0.25),
+                                    width: selectedClockStyle == face.style ? 2 : 1
+                                )
+
+                                PixelText(face.label, size: 6,
+                                    color: selectedClockStyle == face.style ? pixelBlue : pixelGray)
+                            }
+                        }
                     }
                 }
-            default:
-                EmptyView()
             }
         }
-        .onReceive(timer) { input in
-            currentDate = input
+        .padding(14)
+        .border(pixelWhite.opacity(0.2), width: 1)
+    }
+
+    private var emoteSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            PixelText("EMOTE", size: 8, color: pixelGray)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(Array(emoteFaces.enumerated()), id: \.offset) { idx, face in
+                        Button {
+                            selectedEmoteIndex = idx
+                            if bleManager.isConnected { bleManager.sendMode(1) }
+                        } label: {
+                            VStack(spacing: 8) {
+                                ZStack {
+                                    pixelBlack
+                                    // Render actual GIF inside the slot
+                                    GifImageView(name: face.gif)
+                                        .frame(width: 90, height: 75)
+                                        .clipped()
+                                }
+                                .frame(width: 100, height: 80)
+                                .border(
+                                    selectedEmoteIndex == idx ? pixelBlue : pixelWhite.opacity(0.25),
+                                    width: selectedEmoteIndex == idx ? 2 : 1
+                                )
+
+                                PixelText(face.label, size: 6,
+                                    color: selectedEmoteIndex == idx ? pixelBlue : pixelGray)
+                            }
+                        }
+                    }
+                }
+            }
         }
+        .padding(14)
+        .border(pixelWhite.opacity(0.2), width: 1)
     }
-    
-    private func timeString(from date: Date, format: String) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = format
-        return formatter.string(from: date)
+
+    private var activitySection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                PixelText("ACTIVITY", size: 8, color: pixelGray)
+                Spacer()
+                Button {
+                    healthKit.fetchAllMetrics()
+                } label: {
+                    PixelText("REFRESH", size: 6, color: pixelBlack)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(pixelWhite)
+                }
+            }
+
+            if !healthKit.isAuthorized {
+                Button {
+                    healthKit.requestAuthorization { _ in }
+                } label: {
+                    PixelText("GRANT HEALTHKIT ACCESS", size: 8, color: pixelBlack)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(pixelBlue)
+                }
+            }
+
+            VStack(spacing: 0) {
+                ActivityRow(icon: "figure.walk",    label: "STEPS",    value: "\(healthKit.stepCount)", unit: "STEPS", accent: pixelBlue)
+                PixelDivider(axis: .horizontal)
+                ActivityRow(icon: "heart.fill",     label: "HEART RATE", value: "\(healthKit.heartRate)", unit: "BPM", accent: pixelRed)
+                PixelDivider(axis: .horizontal)
+                ActivityRow(icon: "flame.fill",     label: "CALORIES", value: "\(healthKit.activeCalories)", unit: "KCAL", accent: pixelRed)
+                PixelDivider(axis: .horizontal)
+                ActivityRow(icon: "battery.100",    label: "BATTERY",  value: "\(bleManager.batteryLevel)%", unit: "CASE", accent: pixelBlue)
+            }
+            .border(pixelWhite.opacity(0.3), width: 1)
+        }
+        .padding(14)
+        .border(pixelWhite.opacity(0.2), width: 1)
     }
-    
-    private func dateString(from date: Date, format: String) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = format
-        return formatter.string(from: date)
+
+    // MARK: - Helpers
+
+    private var selectedFaceTitle: String {
+        switch faceCategory {
+        case 0: return clockFaces[selectedClockStyle].label
+        case 1: return emoteFaces[selectedEmoteIndex].label.uppercased() + " EMOTE"
+        default: return "ACTIVITY FACE"
+        }
     }
 }
 
-struct AnalogClockHands: View {
-    let date: Date
-    
+// MARK: - Activity Row
+
+struct ActivityRow: View {
+    let icon: String
+    let label: String
+    let value: String
+    let unit: String
+    let accent: Color
+
     var body: some View {
-        GeometryReader { geo in
-            let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
-            let radius = min(geo.size.width, geo.size.height) / 2
-            
-            let calendar = Calendar.current
-            let components = calendar.dateComponents([.hour, .minute, .second], from: date)
-            let hour = CGFloat(components.hour ?? 0)
-            let minute = CGFloat(components.minute ?? 0)
-            let second = CGFloat(components.second ?? 0)
-            
-            let hourAngle = (hour * 30.0) + (minute * 0.5)
-            let minuteAngle = (minute * 6.0) + (second * 0.1)
-            let secondAngle = second * 6.0
-            
-            ZStack {
-                // Hour hand
-                Rectangle()
-                    .fill(Color.white)
-                    .frame(width: 2.5, height: radius * 0.5)
-                    .offset(y: -radius * 0.25)
-                    .rotationEffect(.degrees(hourAngle))
-                    .position(center)
-                
-                // Minute hand
-                Rectangle()
-                    .fill(Color.white)
-                    .frame(width: 1.5, height: radius * 0.75)
-                    .offset(y: -radius * 0.375)
-                    .rotationEffect(.degrees(minuteAngle))
-                    .position(center)
-                
-                // Second hand
-                Rectangle()
-                    .fill(Color.blue)
-                    .frame(width: 1.5, height: radius * 0.85)
-                    .offset(y: -radius * 0.425)
-                    .rotationEffect(.degrees(secondAngle))
-                    .position(center)
-            }
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .black))
+                .foregroundColor(accent)
+                .frame(width: 28)
+
+            PixelText(label, size: 7, color: pixelGray)
+
+            Spacer()
+
+            PixelText(value, size: 10, color: pixelWhite)
+            PixelText(unit, size: 7, color: pixelGray)
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 14)
     }
 }
 
-struct OledActivityPreviewView: View {
-    let batteryLevel: Int
-    
-    var body: some View {
-        ZStack {
-            Color.black
-            
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Image(systemName: "battery.100")
-                        .foregroundColor(.blue)
-                        .font(.system(size: 12))
-                    Text("BATTERY: \(batteryLevel)%")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white)
-                    Spacer()
-                }
-                
-                HStack(spacing: 8) {
-                    Image(systemName: "figure.walk")
-                        .foregroundColor(.red)
-                        .font(.system(size: 12))
-                    Text("STEPS: 8,432")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white)
-                    Spacer()
-                }
-                
-                HStack(spacing: 8) {
-                    Image(systemName: "heart.fill")
-                        .foregroundColor(.red)
-                        .font(.system(size: 12))
-                    Text("HEART RATE: 72 BPM")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white)
-                    Spacer()
-                }
-            }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 8)
-        }
-    }
-}
+// MARK: - Camera View (persistent stream)
 
 struct CameraView: View {
     @Binding var activeScreen: ActiveScreen
     @Binding var isCameraStreaming: Bool
     @ObservedObject var cameraManager: CameraManager
     @ObservedObject var udpStreamer: UDPStreamer
-    
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header Bar with Back Button
-            HStack {
-                Button(action: {
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        activeScreen = .home
-                    }
-                }) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 18, weight: .bold))
-                        Text("CAMERA STREAM")
-                            .font(.system(size: 18, weight: .bold, design: .monospaced))
-                    }
-                    .foregroundColor(.white)
-                }
-                Spacer()
-            }
-            .padding(.top, 16)
-            
-            // Camera Stream preview frame
+        VStack(alignment: .leading, spacing: 16) {
+            PixelBackHeader(title: "CAMERA STREAM") { activeScreen = .home }
+                .padding(.top, 56)
+                .padding(.horizontal, 16)
+
             ZStack {
+                pixelBlack
                 if isCameraStreaming {
                     CameraStreamView(cameraManager: cameraManager, udpStreamer: udpStreamer)
-                        .padding(8)
-                        .background(Color.black)
-                        .border(Color.white, width: 2)
                 } else {
-                    VStack(spacing: 12) {
+                    VStack(spacing: 14) {
                         Image(systemName: "video.slash.fill")
-                            .font(.largeTitle)
-                            .foregroundColor(.red)
-                        Text("STREAM IS OFF")
-                            .font(.system(size: 11, weight: .bold, design: .monospaced))
-                            .foregroundColor(.white)
+                            .font(.system(size: 40))
+                            .foregroundColor(pixelGray)
+                        PixelText("STREAM OFF", size: 9, color: pixelGray)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: 220)
-                    .padding(.vertical, 32)
-                    .background(Color.black)
-                    .border(Color.white, width: 2)
                 }
             }
-            
-            // Toggle stream ON/OFF button
-            Button(action: {
-                withAnimation {
-                    isCameraStreaming.toggle()
-                }
-            }) {
-                Text(isCameraStreaming ? "TURN OFF STREAM" : "TURN ON STREAM")
-                    .font(.system(size: 13, weight: .bold, design: .monospaced))
-                    .foregroundColor(isCameraStreaming ? .black : .white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(isCameraStreaming ? Color.white : Color.black)
-                    .border(Color.white, width: 2)
+            .frame(maxWidth: .infinity)
+            .frame(height: 200)
+            .border(pixelWhite, width: 2)
+            .padding(.horizontal, 16)
+
+            Button {
+                isCameraStreaming.toggle()
+            } label: {
+                PixelText(
+                    isCameraStreaming ? "TURN OFF STREAM" : "TURN ON STREAM",
+                    size: 10,
+                    color: isCameraStreaming ? pixelBlack : pixelWhite
+                )
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 18)
+                .background(isCameraStreaming ? pixelWhite : pixelBlack)
+                .border(pixelWhite, width: 2)
             }
-            .padding(.top, 16)
-            
+            .padding(.horizontal, 16)
+
             Spacer()
-            
-            HStack {
-                Spacer()
-                BottomBrandingIcon()
-                Spacer()
-            }
         }
-        .padding(.bottom, 8)
+        .background(pixelBlack)
     }
 }
 
-struct TilesView: View {
+// MARK: - Settings Page
+
+struct SettingsPage: View {
+    @EnvironmentObject var bleManager: BLEManager
     @Binding var activeScreen: ActiveScreen
-    
+    @State private var notificationsOn = true
+    @State private var brightness: Double = 0.8
+    @State private var healthSyncOn = true
+
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 20) {
-                HStack {
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            activeScreen = .home
+        VStack(alignment: .leading, spacing: 0) {
+            PixelBackHeader(title: "SETTINGS") { activeScreen = .home }
+                .padding(.top, 56)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 20)
+
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 0) {
+                    PixelBorderBox {
+                        VStack(spacing: 0) {
+                            // Notifications
+                            HStack {
+                                PixelText("NOTIFICATIONS", size: 8, color: pixelWhite)
+                                Spacer()
+                                Toggle("", isOn: $notificationsOn)
+                                    .toggleStyle(SwitchToggleStyle(tint: pixelBlue))
+                                    .labelsHidden()
+                            }
+                            .padding(16)
+                            PixelDivider(axis: .horizontal)
+
+                            // Brightness
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack {
+                                    PixelText("BRIGHTNESS", size: 8, color: pixelWhite)
+                                    Spacer()
+                                    PixelText("\(Int(brightness * 100))%", size: 8, color: pixelGray)
+                                }
+                                Slider(value: $brightness).accentColor(pixelBlue)
+                            }
+                            .padding(16)
+                            PixelDivider(axis: .horizontal)
+
+                            // Health Sync
+                            HStack {
+                                PixelText("HEALTH SYNC", size: 8, color: pixelWhite)
+                                Spacer()
+                                Toggle("", isOn: $healthSyncOn)
+                                    .toggleStyle(SwitchToggleStyle(tint: pixelBlue))
+                                    .labelsHidden()
+                            }
+                            .padding(16)
                         }
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 18, weight: .bold))
-                            Text("TILES")
-                                .font(.system(size: 18, weight: .bold, design: .monospaced))
-                        }
-                        .foregroundColor(.white)
                     }
-                    Spacer()
-                }
-                .padding(.top, 16)
-                
-                // Tiles Content
-                VStack(spacing: 16) {
-                    Text("ACTIVE TILES")
-                        .font(.system(size: 12, weight: .bold, design: .monospaced))
-                        .foregroundColor(.gray)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    
-                    // A grid of active widgets
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                        TileCard(title: "ACTIVITY", icon: "figure.walk", description: "8,432 STEPS")
-                        TileCard(title: "WEATHER", icon: "cloud.sun.fill", description: "72°F SUNNY")
-                        TileCard(title: "CALENDAR", icon: "calendar", description: "3 EVENTS")
-                        TileCard(title: "BATTERY", icon: "battery.100", description: "85% SECURE")
-                    }
-                }
-                .padding(16)
-                .background(Color.black)
-                .border(Color.white, width: 2)
-                
-                Spacer(minLength: 24)
-                
-                HStack {
-                    Spacer()
-                    BottomBrandingIcon()
-                    Spacer()
+                    .padding(.horizontal, 16)
                 }
             }
-            .padding(.bottom, 8)
         }
+        .background(pixelBlack)
     }
 }
 
-struct TileCard: View {
+// MARK: - Generic Simple Page
+
+struct SimplePage: View {
     let title: String
     let icon: String
-    let description: String
-    
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundColor(.white)
-            
-            Text(title)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundColor(.gray)
-            
-            Text(description)
-                .font(.system(size: 11, weight: .black, design: .monospaced))
-                .foregroundColor(.white)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .background(Color.white.opacity(0.04))
-        .border(Color.white.opacity(0.3), width: 1.5)
-    }
-}
-
-struct SettingsView: View {
     @Binding var activeScreen: ActiveScreen
-    @State private var notificationsEnabled = true
-    @State private var brightnessValue: Double = 0.8
-    @State private var healthSyncEnabled = true
-    
-    var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 20) {
-                HStack {
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            activeScreen = .home
-                        }
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 18, weight: .bold))
-                            Text("SETTINGS")
-                                .font(.system(size: 18, weight: .bold, design: .monospaced))
-                        }
-                        .foregroundColor(.white)
-                    }
-                    Spacer()
-                }
-                .padding(.top, 16)
-                
-                VStack(spacing: 20) {
-                    // Notifications
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("NOTIFICATIONS")
-                                .font(.system(size: 12, weight: .black, design: .monospaced))
-                                .foregroundColor(.white)
-                            Text("Push case alerts to screen")
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundColor(.gray)
-                        }
-                        Spacer()
-                        Toggle("", isOn: $notificationsEnabled)
-                            .toggleStyle(SwitchToggleStyle(tint: Color(red: 31/255, green: 105/255, blue: 255/255)))
-                            .labelsHidden()
-                    }
-                    .padding(.vertical, 8)
-                    
-                    Rectangle()
-                        .fill(Color.white.opacity(0.3))
-                        .frame(height: 1.5)
-                    
-                    // Display Brightness
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("DISPLAY BRIGHTNESS")
-                                .font(.system(size: 12, weight: .black, design: .monospaced))
-                                .foregroundColor(.white)
-                            Spacer()
-                            Text("\(Int(brightnessValue * 100))%")
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundColor(.gray)
-                        }
-                        Slider(value: $brightnessValue)
-                            .accentColor(Color(red: 31/255, green: 105/255, blue: 255/255))
-                    }
-                    .padding(.vertical, 8)
-                    
-                    Rectangle()
-                        .fill(Color.white.opacity(0.3))
-                        .frame(height: 1.5)
-                    
-                    // Health Sync
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("APPLE HEALTH SYNC")
-                                .font(.system(size: 12, weight: .black, design: .monospaced))
-                                .foregroundColor(.white)
-                            Text("Send daily metrics to case")
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundColor(.gray)
-                        }
-                        Spacer()
-                        Toggle("", isOn: $healthSyncEnabled)
-                            .toggleStyle(SwitchToggleStyle(tint: Color(red: 31/255, green: 105/255, blue: 255/255)))
-                            .labelsHidden()
-                    }
-                    .padding(.vertical, 8)
-                }
-                .padding(16)
-                .background(Color.black)
-                .border(Color.white, width: 2)
-                
-                Spacer(minLength: 24)
-                
-                HStack {
-                    Spacer()
-                    BottomBrandingIcon()
-                    Spacer()
-                }
-            }
-            .padding(.bottom, 8)
-        }
-    }
-}
 
-struct TipsView: View {
-    @Binding var activeScreen: ActiveScreen
-    
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 20) {
-                HStack {
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            activeScreen = .home
-                        }
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 18, weight: .bold))
-                            Text("TIPS & USER GUIDE")
-                                .font(.system(size: 18, weight: .bold, design: .monospaced))
-                        }
-                        .foregroundColor(.white)
-                    }
-                    Spacer()
-                }
-                .padding(.top, 16)
-                
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("QUICK GUIDE")
-                        .font(.system(size: 12, weight: .bold, design: .monospaced))
-                        .foregroundColor(.gray)
-                    
-                    TipRow(number: "01", text: "Turn on Bluetooth on your iPhone before starting scanning.")
-                    TipRow(number: "02", text: "Touch the Capacitive Sensor on the case back to cycle active layouts.")
-                    TipRow(number: "03", text: "Connect to SSID 'OverByte_AP' to start UDP Video Camera stream.")
-                    TipRow(number: "04", text: "Tap the watch faces in the Faces menu to sync the layout over BLE instantly.")
-                }
-                .padding(16)
-                .background(Color.black)
-                .border(Color.white, width: 2)
-                
-                Spacer(minLength: 24)
-                
-                HStack {
-                    Spacer()
-                    BottomBrandingIcon()
-                    Spacer()
-                }
-            }
-            .padding(.bottom, 8)
-        }
-    }
-}
-
-struct TipRow: View {
-    let number: String
-    let text: String
-    
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Text(number)
-                .font(.system(size: 11, weight: .black, design: .monospaced))
-                .foregroundColor(Color(red: 31/255, green: 105/255, blue: 255/255))
-                .padding(6)
-                .background(Color.white.opacity(0.08))
-                .border(Color.white.opacity(0.3), width: 1)
-            
-            Text(text)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(.white)
-                .lineSpacing(4)
-        }
-    }
-}
-
-struct StoreView: View {
-    @Binding var activeScreen: ActiveScreen
-    
-    var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 20) {
-                HStack {
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            activeScreen = .home
-                        }
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 18, weight: .bold))
-                            Text("STORE")
-                                .font(.system(size: 18, weight: .bold, design: .monospaced))
-                        }
-                        .foregroundColor(.white)
-                    }
-                    Spacer()
-                }
-                .padding(.top, 16)
-                
-                VStack(spacing: 16) {
-                    Text("OFFICIAL MERCHANDISE")
-                        .font(.system(size: 12, weight: .bold, design: .monospaced))
-                        .foregroundColor(.gray)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    
-                    StoreItemCard(name: "OVERBYTE PHONE CASE", price: "$49.99", imageSystemName: "candybarphone")
-                    StoreItemCard(name: "REPLACEMENT ACCENT BUTTONS", price: "$9.99", imageSystemName: "circle.grid.2x1.fill")
-                    StoreItemCard(name: "GLOW IN THE DARK DECALS", price: "$14.99", imageSystemName: "sparkles")
-                }
-                .padding(16)
-                .background(Color.black)
-                .border(Color.white, width: 2)
-                
-                Spacer(minLength: 24)
-                
-                HStack {
-                    Spacer()
-                    BottomBrandingIcon()
-                    Spacer()
-                }
-            }
-            .padding(.bottom, 8)
-        }
-    }
-}
-
-struct StoreItemCard: View {
-    let name: String
-    let price: String
-    let imageSystemName: String
-    
-    var body: some View {
-        HStack(spacing: 16) {
-            Image(systemName: imageSystemName)
-                .font(.title2)
-                .foregroundColor(.white)
-                .frame(width: 44, height: 44)
-                .background(Color.white.opacity(0.08))
-                .border(Color.white.opacity(0.3), width: 1)
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text(name)
-                    .font(.system(size: 11, weight: .black, design: .monospaced))
-                    .foregroundColor(.white)
-                Text(price)
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
-                    .foregroundColor(Color(red: 31/255, green: 105/255, blue: 255/255))
-            }
-            
-            Spacer()
-            
-            Text("BUY")
-                .font(.system(size: 10, weight: .black, design: .monospaced))
-                .foregroundColor(.black)
-                .padding(.vertical, 6)
+        VStack(alignment: .leading, spacing: 0) {
+            PixelBackHeader(title: title) { activeScreen = .home }
+                .padding(.top, 56)
                 .padding(.horizontal, 16)
-                .background(Color.white)
+                .padding(.bottom, 20)
+
+            Spacer()
+            Image(systemName: icon)
+                .font(.system(size: 60))
+                .foregroundColor(pixelGray)
+                .frame(maxWidth: .infinity)
+            PixelText("COMING SOON", size: 10, color: pixelGray)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 20)
+            Spacer()
         }
-        .padding(12)
-        .background(Color.white.opacity(0.02))
-        .border(Color.white.opacity(0.12), width: 1)
+        .background(pixelBlack)
     }
 }
 
-// MARK: - Subviews & Supporting Views
+// MARK: - OLED Clock Preview (replicating u8g2 rendering)
 
-struct PreviewViewfinder: View {
-    var body: some View {
-        GeometryReader { geo in
-            Path { path in
-                let w = geo.size.width
-                let h = geo.size.height
-                let len: CGFloat = 8
-                let pad: CGFloat = 8
-                
-                // Top Left
-                path.move(to: CGPoint(x: pad, y: pad + len))
-                path.addLine(to: CGPoint(x: pad, y: pad))
-                path.addLine(to: CGPoint(x: pad + len, y: pad))
-                
-                // Top Right
-                path.move(to: CGPoint(x: w - pad - len, y: pad))
-                path.addLine(to: CGPoint(x: w - pad, y: pad))
-                path.addLine(to: CGPoint(x: w - pad, y: pad + len))
-                
-                // Bottom Left
-                path.move(to: CGPoint(x: pad, y: h - pad - len))
-                path.addLine(to: CGPoint(x: pad, y: h - pad))
-                path.addLine(to: CGPoint(x: pad + len, y: h - pad))
-                
-                // Bottom Right
-                path.move(to: CGPoint(x: w - pad - len, y: h - pad))
-                path.addLine(to: CGPoint(x: w - pad, y: h - pad))
-                path.addLine(to: CGPoint(x: w - pad, y: h - pad - len))
-            }
-            .stroke(Color.white.opacity(0.7), lineWidth: 1.5)
-        }
-    }
-}
+struct OLEDClockPreview: View {
+    let style: Int   // 0 = BIG_DIGITAL, 1 = DIGITAL_DATE, 2 = ANALOG
+    @State private var now = Date()
+    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
-struct ClockPreviewContainer: View {
-    let style: Int
-    let timeString: String
-    
     var body: some View {
         ZStack {
-            if style == 0 {
-                RetroClockPreviewView()
-                    .frame(width: 140, height: 100)
-            } else if style == 1 {
-                AnalogClockPreviewView()
-                    .frame(width: 140, height: 100)
-            } else if style == 2 {
-                BinaryClockPreviewView()
-                    .frame(width: 140, height: 100)
+            pixelBlack
+            switch style {
+            case 0: bigDigital
+            case 1: digitalDate
+            default: analogFace
             }
         }
+        .onReceive(timer) { now = $0 }
     }
-}
 
-struct RetroClockPreviewView: View {
-    @State private var currentDate = Date()
-    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-    
-    var body: some View {
-        VStack(spacing: 6) {
-            let timeString = timeString(from: currentDate)
-            let secondString = secondString(from: currentDate)
-            
-            // Styled matrix digital readout
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text(timeString)
-                    .font(.system(size: 34, weight: .black, design: .monospaced))
-                    .foregroundColor(.white)
-                
-                Text(secondString)
-                    .font(.system(size: 14, weight: .bold, design: .monospaced))
-                    .foregroundColor(.white)
+    // CLOCK_BIG_DIGITAL — u8g2_font_logisoso28_tn style
+    @ViewBuilder private var bigDigital: some View {
+        VStack(spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                PixelText(fmt("HH:mm"), size: 22, color: pixelWhite)
+                PixelText(fmt(":ss"),   size: 10, color: pixelWhite)
+            }
+            HStack {
+                PixelText("BLE OK", size: 5, color: pixelGray)
+                Spacer()
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .border(Color.white, width: 1.5)
-            
-            HStack {
-                Text("SYS_OK")
-                Spacer()
-                Text("SYNCED")
-            }
-            .font(.system(size: 8, weight: .bold, design: .monospaced))
-            .foregroundColor(.gray)
-            .frame(width: 100)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
-        .onReceive(timer) { input in
-            currentDate = input
         }
     }
-    
-    private func timeString(from date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        return formatter.string(from: date)
-    }
-    
-    private func secondString(from date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = ":ss"
-        return formatter.string(from: date)
-    }
-}
 
-struct AnalogClockPreviewView: View {
-    @State private var currentDate = Date()
-    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-    
-    var body: some View {
-        GeometryReader { geo in
-            let size = min(geo.size.width, geo.size.height)
-            let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
-            let radius = size / 2 * 0.85
-            
-            ZStack {
-                Color.black
-                
-                // Clock Face border
-                Circle()
-                    .stroke(Color.white, lineWidth: 1.5)
-                    .frame(width: radius * 2, height: radius * 2)
-                    .position(center)
-                
-                // Center Dot
-                Circle()
-                    .fill(Color.white)
-                    .frame(width: 4, height: 4)
-                    .position(center)
-                
-                // Tick Marks
-                Path { path in
-                    let tickLen: CGFloat = 4
-                    // 12 o'clock
-                    path.move(to: CGPoint(x: center.x, y: center.y - radius))
-                    path.addLine(to: CGPoint(x: center.x, y: center.y - radius + tickLen))
-                    
-                    // 6 o'clock
-                    path.move(to: CGPoint(x: center.x, y: center.y + radius))
-                    path.addLine(to: CGPoint(x: center.x, y: center.y + radius - tickLen))
-                    
-                    // 3 o'clock
-                    path.move(to: CGPoint(x: center.x + radius, y: center.y))
-                    path.addLine(to: CGPoint(x: center.x + radius - tickLen, y: center.y))
-                    
-                    // 9 o'clock
-                    path.move(to: CGPoint(x: center.x - radius, y: center.y))
-                    path.addLine(to: CGPoint(x: center.x - radius + tickLen, y: center.y))
-                }
-                .stroke(Color.white, lineWidth: 1.5)
-                
-                // Hands calculations
-                let calendar = Calendar.current
-                let components = calendar.dateComponents([.hour, .minute, .second], from: currentDate)
-                let hour = CGFloat(components.hour ?? 0)
-                let minute = CGFloat(components.minute ?? 0)
-                let second = CGFloat(components.second ?? 0)
-                
-                let hourAngle = (hour * 30.0) + (minute * 0.5)
-                let minuteAngle = (minute * 6.0) + (second * 0.1)
-                let secondAngle = second * 6.0
-                
-                // Hour Hand
-                Capsule()
-                    .fill(Color.white)
-                    .frame(width: 3, height: radius * 0.5)
-                    .offset(y: -radius * 0.25)
-                    .rotationEffect(.degrees(hourAngle))
-                    .position(center)
-                
-                // Minute Hand
-                Capsule()
-                    .fill(Color.white)
-                    .frame(width: 2, height: radius * 0.75)
-                    .offset(y: -radius * 0.375)
-                    .rotationEffect(.degrees(minuteAngle))
-                    .position(center)
-                
-                // Second Hand
-                Rectangle()
-                    .fill(Color.blue)
-                    .frame(width: 1.5, height: radius * 0.85)
-                    .offset(y: -radius * 0.425)
-                    .rotationEffect(.degrees(secondAngle))
-                    .position(center)
-            }
-        }
-        .background(Color.black)
-        .onReceive(timer) { input in
-            currentDate = input
-        }
-    }
-}
-
-struct BinaryClockPreviewView: View {
-    @State private var currentDate = Date()
-    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-    
-    var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            let h = geo.size.height
-            let spacingX = w / 7
-            let spacingY = h / 6
-            
-            let calendar = Calendar.current
-            let components = calendar.dateComponents([.hour, .minute, .second], from: currentDate)
-            let hour = components.hour ?? 0
-            let minute = components.minute ?? 0
-            let second = components.second ?? 0
-            
-            let hrTens = hour / 10
-            let hrOnes = hour % 10
-            let minTens = minute / 10
-            let minOnes = minute % 10
-            let secTens = second / 10
-            let secOnes = second % 10
-            
-            HStack(spacing: spacingX * 0.8) {
-                Spacer(minLength: 0)
-                BinaryColumn(val: hrTens, rows: 2, spacing: spacingY * 0.7)
-                BinaryColumn(val: hrOnes, rows: 4, spacing: spacingY * 0.7)
-                BinaryColumn(val: minTens, rows: 3, spacing: spacingY * 0.7)
-                BinaryColumn(val: minOnes, rows: 4, spacing: spacingY * 0.7)
-                BinaryColumn(val: secTens, rows: 3, spacing: spacingY * 0.7)
-                BinaryColumn(val: secOnes, rows: 4, spacing: spacingY * 0.7)
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.black)
-        }
-        .background(Color.black)
-        .onReceive(timer) { input in
-            currentDate = input
-        }
-    }
-}
-
-struct BinaryColumn: View {
-    let val: Int
-    let rows: Int
-    let spacing: CGFloat
-    
-    var body: some View {
-        VStack(spacing: spacing) {
-            ForEach((0..<rows).reversed(), id: \.self) { row in
-                let bit = (val >> row) & 1
-                Circle()
-                    .stroke(Color.white, lineWidth: 1)
-                    .background(Circle().fill(bit == 1 ? Color.white : Color.clear))
-                    .frame(width: 6, height: 6)
-            }
-        }
-    }
-}
-
-struct EmotePreviewContainer: View {
-    let emotionIndex: Int
-    
-    var body: some View {
+    // CLOCK_DIGITAL_DATE — u8g2_font_ncenB14_tr style
+    @ViewBuilder private var digitalDate: some View {
         VStack(spacing: 6) {
-            GifImageView(gifName: emoteGifName, fallbackSystemName: "face.smiling")
-                .frame(width: 120, height: 100)
-            
-            Text(emoteName.uppercased())
-                .font(.system(size: 8, weight: .bold, design: .monospaced))
-                .foregroundColor(.gray)
+            PixelText(fmt("HH:mm:ss"), size: 12, color: pixelWhite)
+            PixelText(fmt("EEEE, MMM dd"), size: 6, color: pixelWhite)
         }
     }
-    
-    private var emoteGifName: String {
-        switch emotionIndex {
-        case 0: return "default"
-        case 1: return "what"
-        case 2: return "juding"
-        case 3: return "happy"
-        case 4: return "angry"
-        default: return "default"
+
+    // CLOCK_ANALOG — analog dial + digital readout
+    @ViewBuilder private var analogFace: some View {
+        HStack(spacing: 10) {
+            PixelAnalogDial(date: now, size: 90)
+            VStack(alignment: .leading, spacing: 4) {
+                PixelText(fmt("HH:mm"), size: 10, color: pixelWhite)
+                PixelText(fmt(":ss"),   size: 7,  color: pixelGray)
+                PixelText(fmt("dd/MM"), size: 7,  color: pixelWhite)
+            }
         }
     }
-    
-    private var emoteName: String {
-        switch emotionIndex {
-        case 0: return "Idle"
-        case 1: return "What"
-        case 2: return "Judging"
-        case 3: return "Happy"
-        case 4: return "Angry"
-        default: return "Idle"
+
+    private func fmt(_ format: String) -> String {
+        let f = DateFormatter(); f.dateFormat = format
+        return f.string(from: now)
+    }
+}
+
+// MARK: - Pixel Analog Dial
+
+struct PixelAnalogDial: View {
+    let date: Date
+    let size: CGFloat
+
+    private var calendar: Calendar { Calendar.current }
+    private var comps: DateComponents { calendar.dateComponents([.hour, .minute, .second], from: date) }
+    private var h: CGFloat { CGFloat(comps.hour ?? 0) }
+    private var m: CGFloat { CGFloat(comps.minute ?? 0) }
+    private var s: CGFloat { CGFloat(comps.second ?? 0) }
+    private var hourDeg:   CGFloat { (h.truncatingRemainder(dividingBy: 12)) * 30 + m * 0.5 }
+    private var minuteDeg: CGFloat { m * 6 + s * 0.1 }
+    private var secondDeg: CGFloat { s * 6 }
+
+    var body: some View {
+        ZStack {
+            // Clock circle
+            Circle().stroke(pixelWhite, lineWidth: 2).frame(width: size, height: size)
+
+            // 4 cardinal tick marks
+            ForEach([0.0, 90.0, 180.0, 270.0], id: \.self) { deg in
+                Rectangle()
+                    .fill(pixelWhite)
+                    .frame(width: 1.5, height: size * 0.08)
+                    .offset(y: -(size / 2 - size * 0.04))
+                    .rotationEffect(.degrees(deg))
+            }
+
+            // Hour hand
+            PixelHand(angle: hourDeg, length: size * 0.28, width: 2.5, color: pixelWhite)
+            // Minute hand
+            PixelHand(angle: minuteDeg, length: size * 0.38, width: 1.5, color: pixelWhite)
+            // Second hand — use blue per u8g2 rendering
+            PixelHand(angle: secondDeg, length: size * 0.42, width: 1.0, color: pixelBlue)
+
+            // Center dot
+            Circle().fill(pixelWhite).frame(width: 4, height: 4)
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+// MARK: - Pixel Hand
+
+struct PixelHand: View {
+    let angle: CGFloat
+    let length: CGFloat
+    let width: CGFloat
+    let color: Color
+
+    var body: some View {
+        Rectangle()
+            .fill(color)
+            .frame(width: width, height: length)
+            .offset(y: -length / 2)
+            .rotationEffect(.degrees(angle))
+    }
+}
+
+// MARK: - OLED Emote Preview (loops the GIF)
+
+struct OLEDEmotePreview: View {
+    let gifName: String
+
+    var body: some View {
+        GifImageView(name: gifName)
+            .frame(width: 128, height: 128)
+            .clipped()
+    }
+}
+
+// MARK: - OLED Activity Preview (battery + steps + HR)
+
+struct OLEDActivityPreview: View {
+    @ObservedObject var healthKit: HealthKitManager
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            actRow(icon: "figure.walk", val: "\(healthKit.stepCount) STEPS",   color: pixelBlue)
+            actRow(icon: "heart.fill",  val: "\(healthKit.heartRate) BPM",      color: pixelRed)
+            actRow(icon: "flame.fill",  val: "\(healthKit.activeCalories) KCAL", color: pixelRed)
+        }
+        .padding(10)
+    }
+
+    @ViewBuilder
+    private func actRow(icon: String, val: String, color: Color) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .black))
+                .foregroundColor(color)
+            PixelText(val, size: 6, color: pixelWhite)
         }
     }
 }
 
-// MARK: - Pixel Art Icons
+// MARK: - GIF viewer using WKWebView
+
+struct GifImageView: View {
+    let name: String
+
+    var body: some View {
+        if Bundle.main.url(forResource: name, withExtension: "gif") != nil {
+            _WKGifView(gifName: name)
+        } else {
+            ZStack {
+                pixelBlack
+                PixelText("NO GIF", size: 6, color: pixelGray)
+            }
+        }
+    }
+}
+
+struct _WKGifView: UIViewRepresentable {
+    let gifName: String
+
+    func makeUIView(context: Context) -> WKWebView {
+        let wv = WKWebView()
+        wv.isUserInteractionEnabled = false
+        wv.scrollView.isScrollEnabled = false
+        wv.backgroundColor = .black
+        wv.scrollView.backgroundColor = .black
+        wv.isOpaque = false
+        return wv
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {
+        guard let url = Bundle.main.url(forResource: gifName, withExtension: "gif") else { return }
+        let html = """
+        <!DOCTYPE html><html>
+        <head><meta name='viewport' content='width=device-width, initial-scale=1.0'>
+        <style>html,body{margin:0;padding:0;width:100vw;height:100vh;background:#000;
+        display:flex;justify-content:center;align-items:center;}
+        img{width:100%;height:100%;object-fit:contain;image-rendering:pixelated;}</style>
+        </head><body><img src='\(url.absoluteString)'></body></html>
+        """
+        uiView.loadHTMLString(html, baseURL: Bundle.main.bundleURL)
+    }
+}
+
+// MARK: - Shared UI Primitives
+
+/// Pixel-font text helper
+struct PixelText: View {
+    let text: String
+    let size: CGFloat
+    let color: Color
+    init(_ text: String, size: CGFloat, color: Color = .white) {
+        self.text = text; self.size = size; self.color = color
+    }
+    var body: some View {
+        Text(text)
+            .font(pFont(size))
+            .foregroundColor(color)
+    }
+}
+
+/// Pixel border box
+struct PixelBorderBox<Content: View>: View {
+    @ViewBuilder let content: Content
+    var body: some View {
+        content.background(pixelBlack).border(pixelWhite, width: 2)
+    }
+}
+
+/// 1-pixel hard divider
+struct PixelDivider: View {
+    enum Axis { case horizontal, vertical }
+    let axis: Axis
+    var body: some View {
+        Rectangle().fill(pixelWhite.opacity(0.35))
+            .frame(
+                width:  axis == .horizontal ? nil : 2,
+                height: axis == .horizontal ? 2   : nil
+            )
+    }
+}
+
+/// Back navigation header
+struct PixelBackHeader: View {
+    let title: String
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 16, weight: .black))
+                    .foregroundColor(pixelWhite)
+                PixelText(title, size: 12, color: pixelWhite)
+            }
+        }
+    }
+}
+
+/// Nav cell for the 3-icon grid
+struct NavCell: View {
+    let icon: AnyView
+    let label: String
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 10) {
+                icon
+                PixelText(label, size: 6, color: pixelWhite)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 18)
+            .contentShape(Rectangle())
+        }
+    }
+}
+
+/// Row in the secondary list
+struct ListNavRow: View {
+    let icon: AnyView
+    let title: String
+    var subtitle: String? = nil
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 16) {
+                icon
+                VStack(alignment: .leading, spacing: 5) {
+                    PixelText(title, size: 8, color: pixelWhite)
+                    if let sub = subtitle {
+                        PixelText(sub, size: 5, color: pixelGray)
+                    }
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 16)
+            .contentShape(Rectangle())
+        }
+    }
+}
+
+// MARK: - Pixel Art Icons (no smoothing, blocky, sharp)
 
 struct RobotFaceIcon: View {
+    let size: CGFloat
     var body: some View {
-        VStack(spacing: 2) {
-            // Antenna
-            ZStack(alignment: .top) {
-                Rectangle()
-                    .fill(Color.white)
-                    .frame(width: 2, height: 8)
-                Circle()
-                    .fill(Color.red)
-                    .frame(width: 6, height: 6)
-                    .offset(y: -4)
-            }
-            // Head
-            ZStack {
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color.white, lineWidth: 2)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.black))
-                    .frame(width: 32, height: 26)
-                
-                // Eyes
-                HStack(spacing: 6) {
-                    Rectangle()
-                        .fill(Color.white)
-                        .frame(width: 5, height: 5)
-                    Rectangle()
-                        .fill(Color.white)
-                        .frame(width: 5, height: 5)
+        Canvas { ctx, _ in
+            // Draw with explicit pixel blocks to simulate 1-bit display
+        }
+        .overlay(
+            VStack(spacing: 2) {
+                // Antenna
+                VStack(spacing: 0) {
+                    Circle().fill(pixelRed).frame(width: 6, height: 6)
+                    Rectangle().fill(pixelWhite).frame(width: 2, height: 8)
+                }
+                // Head
+                ZStack {
+                    Rectangle().fill(pixelBlack).frame(width: size * 0.9, height: size * 0.65)
+                        .border(pixelWhite, width: 2)
+                    HStack(spacing: 8) {
+                        Rectangle().fill(pixelWhite).frame(width: 8, height: 8)
+                        Rectangle().fill(pixelWhite).frame(width: 8, height: 8)
+                    }
                 }
             }
-        }
+        )
+        .frame(width: size, height: size)
     }
 }
 
-struct CameraIcon: View {
+struct CameraPixelIcon: View {
+    let size: CGFloat
     var body: some View {
         HStack(spacing: 2) {
             ZStack {
-                RoundedRectangle(cornerRadius: 4)
-                    .stroke(Color.white, lineWidth: 2)
-                    .background(RoundedRectangle(cornerRadius: 4).fill(Color.black))
-                    .frame(width: 30, height: 20)
-                
-                // Red dot
-                Circle()
-                    .fill(Color.red)
-                    .frame(width: 6, height: 6)
+                Rectangle().fill(pixelBlack).frame(width: size * 0.72, height: size * 0.5)
+                    .border(pixelWhite, width: 2)
+                Circle().fill(pixelRed).frame(width: size * 0.22, height: size * 0.22)
             }
-            
-            // Lens piece
-            Path { path in
-                path.move(to: CGPoint(x: 0, y: 3))
-                path.addLine(to: CGPoint(x: 6, y: 0))
-                path.addLine(to: CGPoint(x: 6, y: 12))
-                path.addLine(to: CGPoint(x: 0, y: 9))
-                path.closeSubpath()
+            // Lens trapezoid
+            Path { p in
+                p.move(to: .init(x: 0, y: size * 0.08))
+                p.addLine(to: .init(x: size * 0.22, y: 0))
+                p.addLine(to: .init(x: size * 0.22, y: size * 0.5))
+                p.addLine(to: .init(x: 0, y: size * 0.42))
+                p.closeSubpath()
             }
-            .stroke(Color.white, lineWidth: 2)
-            .frame(width: 6, height: 12)
+            .stroke(pixelWhite, lineWidth: 2)
+            .frame(width: size * 0.22, height: size * 0.5)
         }
-        .frame(height: 26)
+        .frame(width: size, height: size)
     }
 }
 
-struct TilesIcon: View {
+struct GridPixelIcon: View {
+    let size: CGFloat
+    private let cell: CGFloat
+    init(size: CGFloat) { self.size = size; self.cell = size * 0.38 }
     var body: some View {
-        VStack(spacing: 3) {
-            HStack(spacing: 3) {
-                Rectangle()
-                    .stroke(Color.white, lineWidth: 1.8)
-                    .frame(width: 9, height: 9)
-                Rectangle()
-                    .stroke(Color.white, lineWidth: 1.8)
-                    .frame(width: 9, height: 9)
+        VStack(spacing: 4) {
+            HStack(spacing: 4) {
+                pixelCell; pixelCell
             }
-            HStack(spacing: 3) {
-                Rectangle()
-                    .stroke(Color.white, lineWidth: 1.8)
-                    .frame(width: 9, height: 9)
-                Rectangle()
-                    .stroke(Color.white, lineWidth: 1.8)
-                    .frame(width: 9, height: 9)
+            HStack(spacing: 4) {
+                pixelCell; pixelCell
             }
         }
-        .frame(height: 26)
+        .frame(width: size, height: size)
+    }
+    var pixelCell: some View {
+        Rectangle().stroke(pixelWhite, lineWidth: 2).frame(width: cell, height: cell)
     }
 }
 
-struct GearIcon: View {
+struct GearPixelIcon: View {
     var body: some View {
         ZStack {
-            Circle()
-                .stroke(Color.white, lineWidth: 2)
-                .frame(width: 20, height: 20)
-            
+            Circle().stroke(pixelWhite, lineWidth: 2).frame(width: 22, height: 22)
             ForEach(0..<8, id: \.self) { i in
-                Rectangle()
-                    .fill(Color.white)
-                    .frame(width: 3.5, height: 5)
-                    .offset(y: -10)
-                    .rotationEffect(.degrees(Double(i) * 45))
+                Rectangle().fill(pixelWhite).frame(width: 3, height: 6)
+                    .offset(y: -12).rotationEffect(.degrees(Double(i) * 45))
             }
-            
-            Circle()
-                .fill(Color.red)
-                .frame(width: 8, height: 8)
+            Circle().fill(pixelRed).frame(width: 8, height: 8)
         }
-        .frame(width: 26, height: 26)
+        .frame(width: 28, height: 28)
     }
 }
 
-struct LightbulbIcon: View {
+struct BulbPixelIcon: View {
     var body: some View {
         VStack(spacing: 1) {
-            ZStack {
-                Circle()
-                    .stroke(Color.white, lineWidth: 2)
-                    .frame(width: 16, height: 16)
-                
-                Rectangle()
-                    .fill(Color.red)
-                    .frame(width: 4, height: 4)
-            }
-            Rectangle()
-                .fill(Color.white)
-                .frame(width: 8, height: 3)
-            Rectangle()
-                .fill(Color.red)
-                .frame(width: 4, height: 2)
+            Circle().stroke(pixelWhite, lineWidth: 2).frame(width: 16, height: 16)
+            Rectangle().fill(pixelWhite).frame(width: 8, height: 3)
+            Circle().fill(pixelRed).frame(width: 5, height: 5)
         }
-        .frame(width: 26, height: 26)
+        .frame(width: 28, height: 28)
     }
 }
 
-struct BagIcon: View {
+struct BagPixelIcon: View {
     var body: some View {
         VStack(spacing: 0) {
-            Path { path in
-                path.addArc(center: CGPoint(x: 8, y: 6), radius: 5, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: false)
+            Path { p in
+                p.addArc(center: .init(x: 10, y: 5), radius: 6,
+                         startAngle: .degrees(180), endAngle: .degrees(0), clockwise: false)
             }
-            .stroke(Color.red, lineWidth: 1.8)
-            .frame(width: 16, height: 6)
-            
-            RoundedRectangle(cornerRadius: 3)
-                .stroke(Color.white, lineWidth: 2)
-                .background(RoundedRectangle(cornerRadius: 3).fill(Color.black))
-                .frame(width: 20, height: 16)
+            .stroke(pixelRed, lineWidth: 2)
+            .frame(width: 20, height: 6)
+            Rectangle().stroke(pixelWhite, lineWidth: 2).frame(width: 22, height: 16)
         }
-        .frame(width: 26, height: 26)
+        .frame(width: 28, height: 28)
     }
 }
 
-struct BottomBrandingIcon: View {
+struct BottomBrandBadge: View {
     var body: some View {
         ZStack {
-            Circle()
-                .stroke(Color.white.opacity(0.3), lineWidth: 2)
-                .frame(width: 50, height: 50)
-            
+            Circle().stroke(pixelWhite.opacity(0.35), lineWidth: 2).frame(width: 52, height: 52)
             VStack(spacing: 3) {
                 HStack(spacing: 3) {
-                    Rectangle()
-                        .fill(Color(red: 31/255, green: 105/255, blue: 255/255))
-                        .frame(width: 8, height: 8)
-                    Rectangle()
-                        .fill(Color(red: 31/255, green: 105/255, blue: 255/255))
-                        .frame(width: 8, height: 8)
+                    brandSquare; brandSquare
                 }
                 HStack(spacing: 3) {
-                    Rectangle()
-                        .fill(Color(red: 31/255, green: 105/255, blue: 255/255))
-                        .frame(width: 8, height: 8)
-                    Rectangle()
-                        .fill(Color(red: 31/255, green: 105/255, blue: 255/255))
-                        .frame(width: 8, height: 8)
+                    brandSquare; brandSquare
                 }
             }
         }
-        .padding(.bottom, 12)
     }
-}
-
-// MARK: - Circular Previews
-
-struct CircularClassicPreview: View {
-    let index: Int
-    
-    var body: some View {
-        VStack(spacing: 6) {
-            ZStack {
-                Circle()
-                    .stroke(Color.white.opacity(0.12), lineWidth: 2)
-                    .frame(width: 76, height: 76)
-                    .background(Circle().fill(Color.white.opacity(0.02)))
-                
-                if index == 0 {
-                    ZStack {
-                        Circle()
-                            .stroke(Color.white.opacity(0.5), lineWidth: 1)
-                            .frame(width: 64, height: 64)
-                        Circle()
-                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                            .frame(width: 14, height: 14)
-                            .offset(y: -10)
-                        Circle()
-                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                            .frame(width: 14, height: 14)
-                            .offset(x: -10, y: 8)
-                        Circle()
-                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                            .frame(width: 14, height: 14)
-                            .offset(x: 10, y: 8)
-                    }
-                } else if index == 1 {
-                    ZStack {
-                        Circle()
-                            .stroke(Color.white.opacity(0.5), lineWidth: 1)
-                            .frame(width: 64, height: 64)
-                        Text("N")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundColor(.red)
-                            .offset(y: -22)
-                        Text("S")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundColor(.white)
-                            .offset(y: 22)
-                        
-                        Path { path in
-                            path.move(to: CGPoint(x: 16, y: 40))
-                            path.addLine(to: CGPoint(x: 32, y: 18))
-                            path.addLine(to: CGPoint(x: 48, y: 40))
-                            path.closeSubpath()
-                        }
-                        .stroke(Color.white.opacity(0.4), lineWidth: 1)
-                    }
-                } else {
-                    ZStack {
-                        Circle()
-                            .stroke(Color.white.opacity(0.5), lineWidth: 1)
-                            .frame(width: 64, height: 64)
-                        
-                        ForEach(0..<12, id: \.self) { i in
-                            Rectangle()
-                                .fill(Color.white.opacity(0.4))
-                                .frame(width: 1, height: 3)
-                                .offset(y: -28)
-                                .rotationEffect(.degrees(Double(i) * 30))
-                        }
-                        
-                        Rectangle()
-                            .fill(Color.red)
-                            .frame(width: 1.5, height: 20)
-                            .offset(y: -10)
-                            .rotationEffect(.degrees(290))
-                    }
-                }
-            }
-            
-            Text(classicName.uppercased())
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundColor(.gray)
-        }
+    var brandSquare: some View {
+        Rectangle().fill(pixelBlue).frame(width: 9, height: 9)
     }
-    
-    private var classicName: String {
-        switch index {
-        case 0: return "Chrono"
-        case 1: return "Compass"
-        case 2: return "Minimalist"
-        default: return ""
-        }
-    }
-}
-
-// MARK: - WKWebView GIF Loop Engine with SVG/Native Fallbacks
-
-struct GifImageView: View {
-    let gifName: String
-    let fallbackSystemName: String
-    
-    var body: some View {
-        if let _ = Bundle.main.url(forResource: gifName, withExtension: "gif") {
-            WebViewGifRepresentable(gifName: gifName)
-        } else {
-            // Elegant, iOS 15 compatible placeholder for missing local files
-            VStack(spacing: 8) {
-                Image(systemName: fallbackSystemName)
-                    .font(.system(size: 20))
-                    .foregroundColor(.white)
-                Text("MISSING:\n\(gifName.uppercased()).GIF")
-                    .font(.system(size: 7, weight: .bold, design: .monospaced))
-                    .foregroundColor(.gray)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.white.opacity(0.02))
-            .border(Color.white.opacity(0.1), width: 1)
-        }
-    }
-}
-
-struct WebViewGifRepresentable: UIViewRepresentable {
-    let gifName: String
-    
-    func makeUIView(context: Context) -> WKWebView {
-        let webView = WKWebView()
-        webView.navigationDelegate = context.coordinator
-        webView.isUserInteractionEnabled = false
-        webView.scrollView.isScrollEnabled = false
-        webView.scrollView.bounces = false
-        webView.scrollView.contentInsetAdjustmentBehavior = .never
-        webView.backgroundColor = .clear
-        webView.scrollView.backgroundColor = .clear
-        webView.isOpaque = false
-        return webView
-    }
-    
-    func updateUIView(_ uiView: WKWebView, context: Context) {
-        if let url = Bundle.main.url(forResource: gifName, withExtension: "gif") {
-            let html = "<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'><style>html, body { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; display: flex; justify-content: center; align-items: center; background-color: black; } img { max-width: 100%; max-height: 100%; object-fit: contain; }</style></head><body><img src='\(url.absoluteString)'></body></html>"
-            uiView.loadHTMLString(html, baseURL: Bundle.main.bundleURL)
-        }
-    }
-    
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-    
-    class Coordinator: NSObject, WKNavigationDelegate {}
 }

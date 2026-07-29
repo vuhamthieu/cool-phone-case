@@ -13,6 +13,15 @@ targets:
       properties:
         NSCameraUsageDescription: "Streaming retro video to OLED"
         NSBluetoothAlwaysUsageDescription: "Sending commands to ESP32"
+        NSHealthShareUsageDescription: "Reading steps, heart rate and calories for the Activity watch face"
+        UIAppFonts:
+          - PressStart2P-Regular.ttf
+    entitlements:
+      path: ios/OverByte.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access:
+          - health-records
     settings:
       base:
         CODE_SIGNING_ALLOWED: "No"
