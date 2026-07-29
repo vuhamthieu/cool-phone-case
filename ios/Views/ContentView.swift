@@ -77,7 +77,7 @@ struct HomeView: View {
                         .foregroundColor(.white)
                 }
                 .font(.system(size: 28, weight: .black, design: .monospaced))
-                .tracking(2)
+                .kerning(2)
                 .padding(.top, 24)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 
@@ -1015,7 +1015,7 @@ struct RetroClockPreviewView: View {
                 Text(timeString)
                     .font(.system(size: 34, weight: .black, design: .monospaced))
                     .foregroundColor(.white)
-                    .tracking(1)
+                    .kerning(1)
                 
                 Text(secondString)
                     .font(.system(size: 14, weight: .bold, design: .monospaced))
@@ -1322,7 +1322,7 @@ struct CameraIcon: View {
                 path.addLine(to: CGPoint(x: 6, y: 0))
                 path.addLine(to: CGPoint(x: 6, y: 12))
                 path.addLine(to: CGPoint(x: 0, y: 9))
-                path.close()
+                path.closeSubpath()
             }
             .stroke(Color.white, lineWidth: 2)
             .frame(width: 6, height: 12)
@@ -1589,7 +1589,7 @@ struct CircularClassicPreview: View {
                             path.move(to: CGPoint(x: 16, y: 40))
                             path.addLine(to: CGPoint(x: 32, y: 18))
                             path.addLine(to: CGPoint(x: 48, y: 40))
-                            path.close()
+                            path.closeSubpath()
                         }
                         .stroke(Color.white.opacity(0.4), lineWidth: 1)
                     }
