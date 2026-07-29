@@ -507,7 +507,7 @@ struct FacesView: View {
                     
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 16) {
-                            ForEach(0..<5) { emoteIdx in
+                            ForEach(0..<5, id: \.self) { emoteIdx in
                                 CircularEmotePreview(index: emoteIdx, isSelected: !previewingFace && selectedEmote == emoteIdx) {
                                     previewingFace = false
                                     selectedEmote = emoteIdx
@@ -1362,7 +1362,7 @@ struct GearIcon: View {
                 .stroke(Color.white, lineWidth: 2)
                 .frame(width: 20, height: 20)
             
-            ForEach(0..<8) { i in
+            ForEach(0..<8, id: \.self) { i in
                 Rectangle()
                     .fill(Color.white)
                     .frame(width: 3.5, height: 5)
@@ -1599,7 +1599,7 @@ struct CircularClassicPreview: View {
                             .stroke(Color.white.opacity(0.5), lineWidth: 1)
                             .frame(width: 64, height: 64)
                         
-                        ForEach(0..<12) { i in
+                        ForEach(0..<12, id: \.self) { i in
                             Rectangle()
                                 .fill(Color.white.opacity(0.4))
                                 .frame(width: 1, height: 3)
