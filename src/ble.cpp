@@ -155,28 +155,28 @@ void bleInit() {
     // Mode characteristic
     NimBLECharacteristic *pModeChar = pService->createCharacteristic(
         CHARACTERISTIC_MODE_UUID,
-        NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::READ
+        NIMBLE_PROPERTY::WRITE_ENC | NIMBLE_PROPERTY::READ_ENC
     );
     pModeChar->setCallbacks(new ModeCallback());
 
     // Time-sync characteristic
     NimBLECharacteristic *pTimeChar = pService->createCharacteristic(
         CHARACTERISTIC_TIME_UUID,
-        NIMBLE_PROPERTY::WRITE
+        NIMBLE_PROPERTY::WRITE_ENC
     );
     pTimeChar->setCallbacks(new TimeCallback());
 
     // Clock style characteristic
     NimBLECharacteristic *pClockStyleChar = pService->createCharacteristic(
         CHARACTERISTIC_CLOCK_STYLE_UUID,
-        NIMBLE_PROPERTY::WRITE
+        NIMBLE_PROPERTY::WRITE_ENC
     );
     pClockStyleChar->setCallbacks(new ClockStyleCallback());
 
     // Settings characteristic
     NimBLECharacteristic *pSettingsChar = pService->createCharacteristic(
         CHARACTERISTIC_SETTINGS_UUID,
-        NIMBLE_PROPERTY::WRITE
+        NIMBLE_PROPERTY::WRITE_ENC
     );
     pSettingsChar->setCallbacks(new SettingsCallback());
 
@@ -233,6 +233,8 @@ static NimBLEClient* pANCSClient = nullptr;
 static NimBLERemoteCharacteristic* pControlPoint = nullptr;
 static NimBLERemoteCharacteristic* pDataSource = nullptr;
 
+static volatile uint32_t pendingNotifUID = 0;
+
 static void notifyCB(NimBLERemoteCharacteristic* pRemoteCharacteristic, uint8_t* pData, size_t length, bool isNotify) {
     if (!notificationsEnabled) return;
 
@@ -244,15 +246,7 @@ static void notifyCB(NimBLERemoteCharacteristic* pRemoteCharacteristic, uint8_t*
             // 0 = Added, 1 = Modified, 2 = Removed
             if (eventID == 0 || eventID == 1) { 
                 Serial.printf("ANCS: New Notification UID: %u\n", notifUID);
-                if (pControlPoint != nullptr) {
-                    uint8_t cmd[8];
-                    cmd[0] = 0; // CommandIDGetNotificationAttributes
-                    cmd[1] = pData[4]; cmd[2] = pData[5]; cmd[3] = pData[6]; cmd[4] = pData[7]; // UID
-                    cmd[5] = 0; // AppIdentifier
-                    cmd[6] = 1; // Title
-                    cmd[7] = 32; // Max Title Len
-                    pControlPoint->writeValue(cmd, 8, true);
-                }
+                pendingNotifUID = notifUID;
             }
         }
     } else if (pRemoteCharacteristic->getUUID().equals(NimBLEUUID(ANCS_DATA_SRC_UUID))) {
@@ -341,6 +335,25 @@ void ancsTask(void *pvParameters) {
                 }
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(1000));
+
+        // Process pending notification requests outside the BLE callback
+        if (pendingNotifUID != 0 && pControlPoint != nullptr && pANCSClient != nullptr && pANCSClient->isConnected()) {
+            uint32_t uid = pendingNotifUID;
+            pendingNotifUID = 0; // Clear it
+
+            uint8_t cmd[8];
+            cmd[0] = 0; // CommandIDGetNotificationAttributes
+            cmd[1] = uid & 0xFF; 
+            cmd[2] = (uid >> 8) & 0xFF; 
+            cmd[3] = (uid >> 16) & 0xFF; 
+            cmd[4] = (uid >> 24) & 0xFF; // UID
+            cmd[5] = 0; // AppIdentifier
+            cmd[6] = 1; // Title
+            cmd[7] = 32; // Max Title Len
+            
+            pControlPoint->writeValue(cmd, 8, true);
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(100)); // check every 100ms
     }
 }
