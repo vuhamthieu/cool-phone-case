@@ -141,7 +141,6 @@ static NimBLECharacteristic* pBatteryLevelChar = nullptr;
 void bleInit() {
     NimBLEDevice::init("OverByte");
 
-    // Enable Security for ANCS (Bonding)
     NimBLEDevice::setSecurityAuth(true, true, true);
     NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
     NimBLEDevice::setSecurityInitKey(BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID);
