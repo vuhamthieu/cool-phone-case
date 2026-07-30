@@ -21,7 +21,6 @@ class HealthKitManager: ObservableObject {
     }()
 
     func requestAuthorization(completion: @escaping (Bool) -> Void = { _ in }) {
-        // ── Step 1: hardware / simulator availability ─────────────────────────
         print("━━━━ HealthKit: requestAuthorization() called ━━━━")
         guard HKHealthStore.isHealthDataAvailable() else {
             print("✗ HealthKit: isHealthDataAvailable() == FALSE — running on simulator or unsupported device")
@@ -34,14 +33,12 @@ class HealthKitManager: ObservableObject {
         }
         print("✓ HealthKit: isHealthDataAvailable() == TRUE")
 
-        // ── Step 2: log current auth status per type BEFORE requesting ────────
         for type in typesToRead {
             let status = store.authorizationStatus(for: type)
             print("  Pre-auth status for \(type.identifier): \(status.rawValue) " +
                   "(0=notDetermined, 1=sharingDenied, 2=sharingAuthorized)")
         }
 
-        // ── Step 3: present the authorization sheet ───────────────────────────
         print("HealthKit: Calling store.requestAuthorization — sheet should appear now...")
         store.requestAuthorization(toShare: nil, read: typesToRead) { success, error in
             print("━━━━ HealthKit: requestAuthorization callback ━━━━")
@@ -55,7 +52,6 @@ class HealthKitManager: ObservableObject {
                 print("✓ HealthKit: No error in callback")
             }
 
-            // ── Step 4: log per-type status AFTER the sheet ───────────────────
             for type in self.typesToRead {
                 let status = self.store.authorizationStatus(for: type)
                 print("  Post-auth status for \(type.identifier): \(status.rawValue)")

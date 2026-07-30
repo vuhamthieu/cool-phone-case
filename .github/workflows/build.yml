@@ -16,13 +16,16 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      - name: Install ldid (fake-sign / entitlement injector)
+        run: brew install ldid
+
       - name: Create Secrets File
         run: cp ios/Secrets.swift.example ios/Secrets.swift
 
       - name: Generate Xcode Project
         run: xcodegen generate
 
-      - name: Build Application
+      - name: Build Application (no code signing)
         run: |
           xcodebuild -project OverByte.xcodeproj \
                      -scheme OverByte \
@@ -33,12 +36,32 @@ jobs:
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGNING_ALLOWED=NO
 
+      - name: Inject entitlements with ldid
+        run: |
+          APP="build/Build/Products/Release-iphoneos/OverByte.app"
+          BINARY="$APP/OverByte"
+          ENTITLEMENTS="ios/OverByte.entitlements"
+
+          echo "── Verifying paths ──"
+          ls -la "$APP"
+          ls -la "$BINARY"
+          ls -la "$ENTITLEMENTS"
+
+          echo "── Injecting entitlements ──"
+          ldid -S"$ENTITLEMENTS" "$BINARY"
+          echo "✓ ldid entitlement injection complete"
+
+          echo "── Verifying injected entitlements ──"
+          ldid -e "$BINARY"
+
       - name: Package IPA
         run: |
+          APP="build/Build/Products/Release-iphoneos/OverByte.app"
           mkdir -p Payload
-          cp -r build/Build/Products/Release-iphoneos/OverByte.app Payload/
+          cp -r "$APP" Payload/
           zip -r OverByte.ipa Payload
           rm -rf Payload
+          echo "✓ OverByte.ipa packaged successfully"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4

@@ -82,9 +82,6 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
             return
         }
 
-        // The ESP32 has no POSIX TZ database — it calls gmtime() directly on whatever
-        // timestamp we store via settimeofday(). So we send LOCAL time (UTC + offset)
-        // instead of raw UTC, which makes gmtime() return the correct wall-clock time.
         let utcNow = Date().timeIntervalSince1970
         let tzOffset = TimeZone.current.secondsFromGMT()
         let localTimestamp = UInt32(utcNow) + UInt32(tzOffset)
