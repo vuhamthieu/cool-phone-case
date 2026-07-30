@@ -554,13 +554,13 @@ struct FacesView: View {
                             }
 
                             VStack(spacing: 0) {
-                                ActivityRow(icon: "figure.walk", assetName: "icon_steps", label: "STEPS", value: "\(healthKit.stepCount)", unit: "STEPS", accent: pixelBlue)
+                                ActivityRow(icon: "figure.walk", assetName: "icon_steps", label: "STEPS", value: "\(healthKit.stepCount)", unit: "STEPS", accent: glyphTextActive)
                                 Divider().background(Color.white.opacity(0.05))
                                 ActivityRow(icon: "heart.fill", assetName: "icon_heartrate", label: "HEART RATE", value: "\(healthKit.heartRate)", unit: "BPM", accent: glyphAccent)
                                 Divider().background(Color.white.opacity(0.05))
                                 ActivityRow(icon: "flame.fill", assetName: "icon_calories", label: "CALORIES", value: "\(healthKit.activeCalories)", unit: "KCAL", accent: glyphAccent)
                                 Divider().background(Color.white.opacity(0.05))
-                                ActivityRow(icon: "battery.100", assetName: "icon_battery", label: "BATTERY", value: "\(bleManager.batteryLevel)%", unit: "CASE", accent: pixelBlue)
+                                ActivityRow(icon: "battery.100", assetName: "icon_battery", label: "BATTERY", value: "\(bleManager.batteryLevel)%", unit: "CASE", accent: glyphTextActive)
                             }
                             .background(glyphBg)
                             .cornerRadius(6)
@@ -951,7 +951,7 @@ struct OLEDActivityPreview: View {
     @ObservedObject var healthKit: HealthKitManager
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            actRow(icon: "figure.walk", val: "\(healthKit.stepCount) STEPS",   color: pixelBlue)
+            actRow(icon: "figure.walk", val: "\(healthKit.stepCount) STEPS",   color: glyphTextActive)
             actRow(icon: "heart.fill",  val: "\(healthKit.heartRate) BPM",      color: glyphAccent)
             actRow(icon: "flame.fill",  val: "\(healthKit.activeCalories) KCAL", color: glyphAccent)
         }
