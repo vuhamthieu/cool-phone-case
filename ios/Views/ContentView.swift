@@ -793,12 +793,7 @@ struct OLEDClockPreview: View {
     }
 
     @ViewBuilder private var bigDigital: some View {
-        VStack(spacing: 2) {
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                PixelText(fmt("HH:mm"), size: 22, color: glyphTextActive)
-                PixelText(fmt(":ss"),   size: 10, color: glyphTextActive)
-            }
-        }
+        PixelText(fmt("HH:mm"), size: 22, color: glyphTextActive)
     }
 
     @ViewBuilder private var digitalDate: some View {
