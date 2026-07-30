@@ -198,8 +198,11 @@ void bleInit() {
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(CONTROL_SERVICE_UUID);
     pAdvertising->addServiceUUID(NimBLEUUID((uint16_t)0x180F));
+    pAdvertising->setName("OverByte");
     pAdvertising->setScanResponse(true);
-    pAdvertising->start();
+    pAdvertising->setMinPreferred(0x06);
+    pAdvertising->setMaxPreferred(0x12);
+    NimBLEDevice::startAdvertising();
 
     Serial.println("BLE Initialized. Advertising: OverByte (Control + Battery)");
 
