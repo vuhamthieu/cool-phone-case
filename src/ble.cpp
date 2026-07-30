@@ -29,6 +29,9 @@ class ServerCallbacks: public NimBLEServerCallbacks {
         if (pServer->getPeerInfo(desc->conn_handle).isBonded()) {
             Serial.println("Device is already bonded, queuing ANCS start.");
             shouldStartANCS = true;
+        } else {
+            Serial.println("Not bonded — forcing pairing now.");
+            NimBLEDevice::startSecurity(desc->conn_handle);
         }
     }
 
@@ -58,15 +61,16 @@ class ModeCallback: public NimBLECharacteristicCallbacks {
         std::string rxValue = pCharacteristic->getValue();
         if (rxValue.length() > 0) {
             uint8_t modeVal = rxValue[0];
-            if (modeVal <= 2) {   // 0-2 valid now
+            if (modeVal <= 1) {
                 SystemMode newMode = (SystemMode)modeVal;
-                if (currentMode != newMode) {
-                    currentMode = newMode;
-                    modeChangedFlag = true;
-                    Serial.printf("Mode changed over BLE: %d\n", currentMode);
-                }
+                currentMode = newMode;
+                modeChangedFlag = true;
+                Serial.printf("Mode changed over BLE: %d\n", currentMode);
             }
         }
+    }
+    void onRead(NimBLECharacteristic *pCharacteristic) override {
+        Serial.println("Mode characteristic READ (pairing trigger)");
     }
 };
 
