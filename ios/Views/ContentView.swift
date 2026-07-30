@@ -189,7 +189,8 @@ struct HomeView: View {
                 // ── Secondary Nav Rows (Enlarged CustomIconContainer circle sizes)
                 VStack(spacing: 10) {
                     HomeNavListRow(
-                        icon: AnyView(CustomIconContainer(name: "icon_setting", fallbackSymbol: "gearshape.fill", fallbackAccentColor: glyphAccent)),
+                        iconName: "icon_setting",
+                        fallbackSymbol: "gearshape.fill",
                         title: "SETTING",
                         subtitle: "Notifications • Display • Health"
                     ) {
@@ -203,7 +204,8 @@ struct HomeView: View {
                     )
 
                     HomeNavListRow(
-                        icon: AnyView(CustomIconContainer(name: "icon_tips", fallbackSymbol: "lightbulb.fill", fallbackAccentColor: glyphAccent, fallbackAccentBottom: true)),
+                        iconName: "icon_tips",
+                        fallbackSymbol: "lightbulb.fill",
                         title: "TIPS AND USER GUIDE"
                     ) {
                         activeScreen = .tips
@@ -216,7 +218,8 @@ struct HomeView: View {
                     )
 
                     HomeNavListRow(
-                        icon: AnyView(CustomIconContainer(name: "icon_store", fallbackSymbol: "bag.fill", fallbackAccentColor: glyphAccent, fallbackIsBag: true)),
+                        iconName: "icon_store",
+                        fallbackSymbol: "bag.fill",
                         title: "STORE"
                     ) {
                         activeScreen = .store
@@ -239,28 +242,48 @@ struct HomeView: View {
 // MARK: - Home Navigation Row Helper (Scaled Up)
 
 struct HomeNavListRow: View {
-    let icon: AnyView
+    let iconName: String          // Asset catalog name
+    let fallbackSymbol: String    // SF Symbol fallback
     let title: String
     var subtitle: String? = nil
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 20) {
-                icon
-                VStack(alignment: .leading, spacing: 6) {
-                    PixelText(title, size: 10, color: glyphTextActive) // 7 -> 10
-                    if let sub = subtitle {
-                        PixelText(sub, size: 8, color: glyphTextMuted) // 5 -> 8
+            HStack(spacing: 18) {
+                // Flat icon — no grey circle, just the image itself
+                Group {
+                    if let uiImg = UIImage(named: iconName) {
+                        Image(uiImage: uiImg)
+                            .resizable()
+                            .scaledToFit()
+                    } else {
+                        Image(systemName: fallbackSymbol)
+                            .font(.system(size: 32, weight: .medium))
+                            .foregroundColor(glyphTextMuted)
                     }
                 }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 16, weight: .bold)) // Enlarged chevron
-                    .foregroundColor(glyphTextMuted)
+                .frame(width: 44, height: 44)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(title)
+                        .font(pFont(9))
+                        .foregroundColor(glyphTextActive)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    if let sub = subtitle {
+                        Text(sub)
+                            .font(pFont(7))
+                            .foregroundColor(glyphTextMuted)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                }
+
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, 18)
-            .padding(.vertical, 18)
+            .padding(.vertical, 16)
         }
     }
 }
@@ -775,11 +798,6 @@ struct OLEDClockPreview: View {
                 PixelText(fmt("HH:mm"), size: 22, color: glyphTextActive)
                 PixelText(fmt(":ss"),   size: 10, color: glyphTextActive)
             }
-            HStack {
-                PixelText("BLE OK", size: 5, color: glyphTextMuted)
-                Spacer()
-            }
-            .padding(.horizontal, 10)
         }
     }
 

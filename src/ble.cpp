@@ -48,21 +48,30 @@ class ModeCallback: public NimBLECharacteristicCallbacks {
 class TimeCallback: public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic *pCharacteristic) override {
         std::string rxValue = pCharacteristic->getValue();
-        uint32_t timestamp = 0;
 
+        Serial.printf("TimeCallback: received %d byte(s)\n", (int)rxValue.length());
+        for (size_t i = 0; i < rxValue.length(); i++) {
+            Serial.printf("  [%d] = 0x%02X\n", (int)i, (uint8_t)rxValue[i]);
+        }
+
+        uint32_t timestamp = 0;
         if (rxValue.length() == 4) {
+            // iOS sends 4-byte little-endian UInt32
             memcpy(&timestamp, rxValue.data(), 4);
         } else if (rxValue.length() > 0) {
+            // Fallback: plain ASCII decimal string
             timestamp = strtoul(rxValue.c_str(), NULL, 10);
         }
 
         if (timestamp > 0) {
             struct timeval tv;
-            tv.tv_sec = timestamp;
+            tv.tv_sec  = (time_t)timestamp;
             tv.tv_usec = 0;
             settimeofday(&tv, NULL);
             timeSynced = true;
-            Serial.printf("RTC Time synchronized: %u\n", timestamp);
+            Serial.printf("RTC synced to Unix timestamp: %u\n", timestamp);
+        } else {
+            Serial.println("TimeCallback: invalid timestamp, RTC not updated");
         }
     }
 };
