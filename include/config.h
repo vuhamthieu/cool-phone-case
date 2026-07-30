@@ -6,8 +6,7 @@
 #define CONTROL_SERVICE_UUID          "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define CHARACTERISTIC_MODE_UUID      "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 #define CHARACTERISTIC_TIME_UUID      "e3223119-944c-477c-abf1-efac3e8b15d0"
-// 8-byte binary payload: [steps:uint32_t][bpm:uint16_t][calories:uint16_t] (all little-endian)
-#define CHARACTERISTIC_ACTIVITY_UUID  "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+#define CHARACTERISTIC_CLOCK_STYLE_UUID "c5b6a7d8-e9f0-1234-abcd-ef1234567890"
 
 // Wi-Fi Config for OTA only
 #if __has_include("secrets.h")
@@ -16,11 +15,10 @@
 #error "secrets.h is missing! Copy secrets.h.example to secrets.h and customize your local credentials."
 #endif
 
-// 3 Main Modes (MODE_CAMERA has been completely removed)
+// 2 Main Modes (MODE_ACTIVITY and MODE_CAMERA have been removed)
 enum SystemMode {
     MODE_CLOCK    = 0,
-    MODE_MOCHI    = 1,
-    MODE_ACTIVITY = 2
+    MODE_MOCHI    = 1
 };
 
 // Sub-states for Clock Mode
@@ -48,11 +46,6 @@ extern MochiEmotion currentMochiEmotion;
 extern volatile bool modeChangedFlag;
 extern volatile bool touchTriggeredFlag;
 extern bool timeSynced;
-
-// Activity Data received from iOS HealthKit via BLE
-extern volatile uint32_t activitySteps;
-extern volatile uint16_t activityBPM;
-extern volatile uint16_t activityCalories;
 
 // Battery & Multitasking States
 extern volatile bool isLowBattery;

@@ -7,12 +7,9 @@ enum ActiveScreen {
     case home, faces, tiles, settings, tips, store
 }
 
-// MARK: - Active Preview Enum
-
 enum ActivePreview: Equatable {
     case clock(Int)
     case emote(Int)
-    case activity
 }
 
 // MARK: - Pixel Font Helper
@@ -37,7 +34,6 @@ struct ContentView: View {
     @State private var activeScreen: ActiveScreen = .home
     @State private var selectedClockStyle: Int = 0   // 0=Big Digital, 1=Digital Date, 2=Analog
     @State private var selectedEmoteIndex: Int = 0
-    @StateObject private var healthKit = HealthKitManager()
 
     var body: some View {
         ZStack {
@@ -50,17 +46,13 @@ struct ContentView: View {
                 FacesView(
                     activeScreen: $activeScreen,
                     selectedClockStyle: $selectedClockStyle,
-                    selectedEmoteIndex: $selectedEmoteIndex,
-                    healthKit: healthKit
+                    selectedEmoteIndex: $selectedEmoteIndex
                 )
             case .tiles:    SimplePage(title: "TILES", icon: "square.grid.2x2", activeScreen: $activeScreen)
             case .settings: SettingsPage(activeScreen: $activeScreen)
             case .tips:     SimplePage(title: "USER GUIDE", icon: "lightbulb", activeScreen: $activeScreen)
             case .store:    SimplePage(title: "STORE", icon: "bag", activeScreen: $activeScreen)
             }
-        }
-        .onAppear {
-            healthKit.requestAuthorization { _ in }
         }
     }
 }
@@ -295,7 +287,6 @@ struct FacesView: View {
     @Binding var activeScreen: ActiveScreen
     @Binding var selectedClockStyle: Int
     @Binding var selectedEmoteIndex: Int
-    @ObservedObject var healthKit: HealthKitManager
 
     // Active preview state
     @State private var activePreview: ActivePreview = .clock(0)
@@ -353,8 +344,6 @@ struct FacesView: View {
                                     OLEDClockPreview(style: style)
                                 case .emote(let index):
                                     OLEDEmotePreview(gifName: emoteFaces[index].gif)
-                                case .activity:
-                                    OLEDActivityPreview(healthKit: healthKit)
                                 }
                             }
                             .scaleEffect(1.3) // Perfectly centered and enlarged content
@@ -409,7 +398,10 @@ struct FacesView: View {
                                         Button {
                                             selectedClockStyle = face.style
                                             activePreview = .clock(face.style)
-                                            if bleManager.isConnected { bleManager.sendMode(0) }
+                                            if bleManager.isConnected {
+                                                bleManager.sendMode(0)
+                                                bleManager.sendClockStyle(style: face.style)
+                                            }
                                         } label: {
                                             VStack(spacing: 10) {
                                                 // Enlarged option box (80 -> 120)
@@ -510,73 +502,6 @@ struct FacesView: View {
                         )
                     }
                     .padding(.horizontal, 16)
-
-                    // 4. Section: ACTIVITY (Sync logic & health labels scaled)
-                    VStack(alignment: .leading, spacing: 10) {
-                        PixelText("ACTIVITY", size: 9, color: glyphTextMuted)
-                            .padding(.horizontal, 4)
-
-                        VStack(alignment: .leading, spacing: 20) {
-                            HStack {
-                                PixelText("LIVE HEALTH METRICS", size: 9, color: glyphTextActive)
-                                Spacer()
-                                Button {
-                                    healthKit.fetchAllMetrics()
-                                    activePreview = .activity
-                                    if bleManager.isConnected {
-                                        bleManager.sendMode(2)
-                                    }
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                                        bleManager.sendActivityData(
-                                            steps:    UInt32(healthKit.stepCount),
-                                            bpm:      UInt16(healthKit.heartRate),
-                                            calories: UInt16(healthKit.activeCalories)
-                                        )
-                                    }
-                                } label: {
-                                    PixelText("SYNC TO OLED", size: 8, color: .black) // 5 -> 8
-                                        .padding(.horizontal, 14)
-                                        .padding(.vertical, 8)
-                                        .background(glyphTextActive)
-                                        .cornerRadius(6)
-                                }
-                            }
-
-                            if !healthKit.isAuthorized {
-                                Button {
-                                    healthKit.requestAuthorization { _ in }
-                                } label: {
-                                    PixelText("GRANT HEALTHKIT ACCESS", size: 10, color: .white) // 6 -> 10
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 16)
-                                        .background(glyphAccent)
-                                        .cornerRadius(6)
-                                }
-                            }
-
-                            VStack(spacing: 0) {
-                                ActivityRow(icon: "figure.walk", assetName: "icon_steps", label: "STEPS", value: "\(healthKit.stepCount)", unit: "STEPS", accent: glyphTextActive)
-                                Divider().background(Color.white.opacity(0.05))
-                                ActivityRow(icon: "heart.fill", assetName: "icon_heartrate", label: "HEART RATE", value: "\(healthKit.heartRate)", unit: "BPM", accent: glyphAccent)
-                                Divider().background(Color.white.opacity(0.05))
-                                ActivityRow(icon: "flame.fill", assetName: "icon_calories", label: "CALORIES", value: "\(healthKit.activeCalories)", unit: "KCAL", accent: glyphAccent)
-                            }
-                            .background(glyphBg)
-                            .cornerRadius(8)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.white.opacity(0.1), lineWidth: 1.5)
-                            )
-                        }
-                        .padding(18)
-                        .background(glyphCardBg)
-                        .cornerRadius(8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.white.opacity(0.05), lineWidth: 1)
-                        )
-                    }
-                    .padding(.horizontal, 16)
                     .padding(.bottom, 32)
                 }
             }
@@ -592,8 +517,6 @@ struct FacesView: View {
             return clockFaces[style].label
         case .emote(let index):
             return emoteFaces[index].label.uppercased() + " EMOTE"
-        case .activity:
-            return "ACTIVITY FACE"
         }
     }
 
@@ -609,55 +532,7 @@ struct FacesView: View {
             }
         case .emote:
             return "GIF  Animated  Mochi"
-        case .activity:
-            return "Steps  BPM  Calories"
         }
-    }
-
-    private var activeIndicatorIndex: Int {
-        switch activePreview {
-        case .clock: return 0
-        case .emote: return 1
-        case .activity: return 2
-        }
-    }
-}
-
-// MARK: - Activity Row (Scaled Up)
-
-struct ActivityRow: View {
-    let icon: String
-    let assetName: String
-    let label: String
-    let value: String
-    let unit: String
-    let accent: Color
-
-    var body: some View {
-        HStack(spacing: 16) {
-            if let uiImage = UIImage(named: assetName) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFit()
-                    .foregroundColor(accent)
-                    .frame(width: 40, height: 40) // Enlarged custom icon to 40x40
-                    .frame(width: 44)
-            } else {
-                Image(systemName: icon)
-                    .font(.system(size: 28, weight: .black)) // Enlarged SF Symbol to at least 24
-                    .foregroundColor(accent)
-                    .frame(width: 44)
-            }
-
-            PixelText(label, size: 8, color: glyphTextMuted) // 5 -> 8
-
-            Spacer()
-
-            PixelText(value, size: 14, color: glyphTextActive) // 7 -> 14
-            PixelText(unit, size: 8, color: glyphTextMuted) // 5 -> 8
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 16) // Enlarged padding
     }
 }
 
@@ -668,7 +543,6 @@ struct SettingsPage: View {
     @Binding var activeScreen: ActiveScreen
     @State private var notificationsOn = true
     @State private var brightness: Double = 0.8
-    @State private var healthSyncOn = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -708,17 +582,6 @@ struct SettingsPage: View {
                                 PixelText("\(Int(brightness * 100))%", size: 8, color: glyphTextMuted) // 6 -> 8
                             }
                             Slider(value: $brightness).accentColor(glyphAccent)
-                        }
-                        .padding(18)
-                        Divider().background(Color.white.opacity(0.05))
-
-                        // Health Sync
-                        HStack {
-                            PixelText("HEALTH SYNC", size: 10, color: glyphTextActive) // 7 -> 10
-                            Spacer()
-                            Toggle("", isOn: $healthSyncOn)
-                                .toggleStyle(SwitchToggleStyle(tint: glyphAccent))
-                                .labelsHidden()
                         }
                         .padding(18)
                     }
@@ -934,29 +797,6 @@ struct OLEDEmotePreview: View {
     }
 }
 
-// MARK: - OLED Activity Preview
-
-struct OLEDActivityPreview: View {
-    @ObservedObject var healthKit: HealthKitManager
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            actRow(icon: "figure.walk", val: "\(healthKit.stepCount) STEPS",   color: glyphTextActive)
-            actRow(icon: "heart.fill",  val: "\(healthKit.heartRate) BPM",      color: glyphAccent)
-            actRow(icon: "flame.fill",  val: "\(healthKit.activeCalories) KCAL", color: glyphAccent)
-        }
-        .padding(10)
-    }
-
-    @ViewBuilder
-    private func actRow(icon: String, val: String, color: Color) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.system(size: 10, weight: .black))
-                .foregroundColor(color)
-            PixelText(val, size: 6, color: glyphTextActive)
-        }
-    }
-}
 
 // MARK: - GIF Web View
 

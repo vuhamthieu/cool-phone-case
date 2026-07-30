@@ -12,16 +12,8 @@ targets:
       path: ios/Info.plist
       properties:
         NSBluetoothAlwaysUsageDescription: "Sending commands to ESP32"
-        NSHealthShareUsageDescription: "Reading steps, heart rate and calories for the Activity watch face"
-        NSHealthUpdateUsageDescription: "Writing activity data is not used, but required by the HealthKit authorization API"
         UIAppFonts:
           - PressStart2P-Regular.ttf
-    entitlements:
-      path: ios/OverByte.entitlements
-      properties:
-        com.apple.developer.healthkit: true
-    capabilities:
-      - type: healthKit
     settings:
       base:
         CODE_SIGNING_ALLOWED: "No"

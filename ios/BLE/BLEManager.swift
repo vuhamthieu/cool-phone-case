@@ -5,10 +5,9 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
 
     // Service and Characteristic UUIDs matching ESP32 firmware
     static let serviceUUID = CBUUID(string: "4fafc201-1fb5-459e-8fcc-c5c9c331914b")
-    static let modeCharacteristicUUID     = CBUUID(string: "beb5483e-36e1-4688-b7f5-ea07361b26a8")
-    static let timeCharacteristicUUID     = CBUUID(string: "e3223119-944c-477c-abf1-efac3e8b15d0")
-    // 8-byte activity payload: uint32 steps + uint16 bpm + uint16 calories (little-endian)
-    static let activityCharacteristicUUID = CBUUID(string: "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
+    static let modeCharacteristicUUID       = CBUUID(string: "beb5483e-36e1-4688-b7f5-ea07361b26a8")
+    static let timeCharacteristicUUID       = CBUUID(string: "e3223119-944c-477c-abf1-efac3e8b15d0")
+    static let clockStyleCharacteristicUUID = CBUUID(string: "c5b6a7d8-e9f0-1234-abcd-ef1234567890")
 
     // Standard GATT Battery service and characteristic UUIDs
     static let batteryServiceUUID        = CBUUID(string: "180F")
@@ -24,7 +23,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     private var centralManager: CBCentralManager!
     private var modeCharacteristic: CBCharacteristic?
     private var timeCharacteristic: CBCharacteristic?
-    private var activityCharacteristic: CBCharacteristic?
+    private var clockStyleCharacteristic: CBCharacteristic?
     private var batteryCharacteristic: CBCharacteristic?
 
     override init() {
@@ -96,28 +95,17 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         print("BLE syncTime: wrote 4 bytes: \(payload.map { String(format: "%02X", $0) }.joined(separator: " "))")
     }
 
-    /// Pack HealthKit metrics into an 8-byte little-endian frame and write to the ESP32.
-    ///
-    /// Payload layout (matches `ActivityCallback::onWrite` in ble.cpp):
-    ///   Bytes 0-3: UInt32  stepCount       (little-endian)
-    ///   Bytes 4-5: UInt16  heartRateBPM    (little-endian)
-    ///   Bytes 6-7: UInt16  activeCalories  (little-endian)
-    func sendActivityData(steps: UInt32, bpm: UInt16, calories: UInt16) {
-        guard let peripheral = activePeripheral, let char = activityCharacteristic else {
-            print("BLE Warning: Device not connected or activity characteristic missing")
+    /// Send selected clock style to the ESP32.
+    func sendClockStyle(style: Int) {
+        guard let peripheral = activePeripheral, let char = clockStyleCharacteristic else {
+            print("BLE Warning: Device not connected or clock style characteristic missing")
             return
         }
-        var payload = Data(count: 8)
-        payload.withUnsafeMutableBytes { ptr in
-            ptr.storeBytes(of: steps.littleEndian,    toByteOffset: 0, as: UInt32.self)
-            ptr.storeBytes(of: bpm.littleEndian,      toByteOffset: 4, as: UInt16.self)
-            ptr.storeBytes(of: calories.littleEndian, toByteOffset: 6, as: UInt16.self)
-        }
-        peripheral.writeValue(payload, for: char, type: .withResponse)
-        print("Sent activity data — Steps:\(steps) BPM:\(bpm) Cal:\(calories)")
-    }
-
-    // MARK: - CBCentralManagerDelegate
+        var val = UInt8(style)
+        let data = Data(bytes: &val, count: 1)
+        peripheral.writeValue(data, for: char, type: .withResponse)
+        print("BLE: Sent clock style \(style) to ESP32")
+    } // MARK: - CBCentralManagerDelegate
 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         if central.state == .poweredOn {
@@ -176,7 +164,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
                     peripheral.discoverCharacteristics(
                         [Self.modeCharacteristicUUID,
                          Self.timeCharacteristicUUID,
-                         Self.activityCharacteristicUUID],
+                         Self.clockStyleCharacteristicUUID],
                         for: service
                     )
                 } else if service.uuid == Self.batteryServiceUUID {
@@ -199,9 +187,9 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
                     print("Found Time Characteristic")
                     // Sync time automatically on connect
                     syncTime()
-                } else if characteristic.uuid == Self.activityCharacteristicUUID {
-                    activityCharacteristic = characteristic
-                    print("Found Activity Characteristic")
+                } else if characteristic.uuid == Self.clockStyleCharacteristicUUID {
+                    clockStyleCharacteristic = characteristic
+                    print("Found Clock Style Characteristic")
                 } else if characteristic.uuid == Self.batteryCharacteristicUUID {
                     batteryCharacteristic = characteristic
                     print("Found Battery Characteristic")

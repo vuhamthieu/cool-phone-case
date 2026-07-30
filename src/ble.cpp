@@ -75,35 +75,17 @@ class TimeCallback: public NimBLECharacteristicCallbacks {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Activity characteristic:
-//   8-byte little-endian payload written by the iOS app after HealthKit fetch:
-//     Bytes 0-3: uint32_t  stepCount
-//     Bytes 4-5: uint16_t  heartRateBPM
-//     Bytes 6-7: uint16_t  activeCaloriesKcal
+// Clock style characteristic: 1-byte style index [0=BIG_DIGITAL | 1=DIGITAL_DATE | 2=ANALOG]
 // ─────────────────────────────────────────────────────────────────────────────
-class ActivityCallback: public NimBLECharacteristicCallbacks {
+class ClockStyleCallback: public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic *pCharacteristic) override {
         std::string rxValue = pCharacteristic->getValue();
-
-        if (rxValue.length() >= 8) {
-            uint32_t steps    = 0;
-            uint16_t bpm      = 0;
-            uint16_t calories = 0;
-
-            memcpy(&steps,    rxValue.data() + 0, 4);
-            memcpy(&bpm,      rxValue.data() + 4, 2);
-            memcpy(&calories, rxValue.data() + 6, 2);
-
-            // Write atomically (these are word-aligned volatiles on Xtensa/RISC-V)
-            activitySteps    = steps;
-            activityBPM      = bpm;
-            activityCalories = calories;
-
-            Serial.printf("Activity update — Steps:%lu  BPM:%u  Cal:%u\n",
-                          (unsigned long)steps, bpm, calories);
-        } else {
-            Serial.printf("Activity payload too short (%d bytes), ignored\n",
-                          (int)rxValue.length());
+        if (rxValue.length() > 0) {
+            uint8_t styleVal = rxValue[0];
+            if (styleVal < CLOCK_STYLE_MAX) {
+                currentClockStyle = (ClockStyle)styleVal;
+                Serial.printf("Clock Style changed over BLE: %d\n", currentClockStyle);
+            }
         }
     }
 };
@@ -135,12 +117,12 @@ void bleInit() {
     );
     pTimeChar->setCallbacks(new TimeCallback());
 
-    // Activity data characteristic (write-only from iOS)
-    NimBLECharacteristic *pActivityChar = pService->createCharacteristic(
-        CHARACTERISTIC_ACTIVITY_UUID,
+    // Clock style characteristic
+    NimBLECharacteristic *pClockStyleChar = pService->createCharacteristic(
+        CHARACTERISTIC_CLOCK_STYLE_UUID,
         NIMBLE_PROPERTY::WRITE
     );
-    pActivityChar->setCallbacks(new ActivityCallback());
+    pClockStyleChar->setCallbacks(new ClockStyleCallback());
 
     pService->start();
 
@@ -160,7 +142,7 @@ void bleInit() {
     pAdvertising->setScanResponse(true);
     pAdvertising->start();
 
-    Serial.println("BLE Initialized. Advertising: OverByte (Control + Activity + Battery)");
+    Serial.println("BLE Initialized. Advertising: OverByte (Control + Battery)");
 }
 
 bool bleIsConnected() {
