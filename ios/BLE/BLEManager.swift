@@ -206,6 +206,8 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
                 if characteristic.uuid == Self.modeCharacteristicUUID {
                     modeCharacteristic = characteristic
                     print("Found Mode Characteristic")
+                    // Dummy read to force iOS pairing dialog immediately
+                    peripheral.readValue(for: characteristic)
                 } else if characteristic.uuid == Self.timeCharacteristicUUID {
                     timeCharacteristic = characteristic
                     print("Found Time Characteristic")
