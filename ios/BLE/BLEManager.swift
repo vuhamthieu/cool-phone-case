@@ -77,10 +77,13 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
             print("BLE Warning: Device not connected or time characteristic missing")
             return
         }
-        var timestamp = UInt32(Date().timeIntervalSince1970)
-        let data = Data(bytes: &timestamp, count: MemoryLayout<UInt32>.size)
-        peripheral.writeValue(data, for: char, type: .withResponse)
-        print("Sent Unix timestamp to ESP32: \(timestamp)")
+        let epoch = UInt32(Date().timeIntervalSince1970)
+        var payload = Data(count: 4)
+        payload.withUnsafeMutableBytes { ptr in
+            ptr.storeBytes(of: epoch.littleEndian, toByteOffset: 0, as: UInt32.self)
+        }
+        peripheral.writeValue(payload, for: char, type: .withResponse)
+        print("Sent Unix timestamp to ESP32: \(epoch)")
     }
 
     /// Pack HealthKit metrics into an 8-byte little-endian frame and write to the ESP32.

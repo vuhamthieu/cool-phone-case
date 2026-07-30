@@ -65,7 +65,7 @@ struct ContentView: View {
     }
 }
 
-// MARK: - Home View (Glyph Minimal Styling)
+// MARK: - Home View (Glyph Minimal Styling - Scaled Up)
 
 struct HomeView: View {
     @EnvironmentObject var bleManager: BLEManager
@@ -75,52 +75,52 @@ struct HomeView: View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
 
-                // ── Logo ──────────────────────────────────────────────────────
+                // ── Logo (Scale: 18 -> 26) ──────────────────────────────────
                 HStack(spacing: 0) {
-                    PixelText("OVER", size: 18, color: glyphTextActive)
-                    PixelText("B",    size: 18, color: glyphAccent)
-                    PixelText("YTE",  size: 18, color: glyphTextActive)
+                    PixelText("OVER", size: 26, color: glyphTextActive)
+                    PixelText("B",    size: 26, color: glyphAccent)
+                    PixelText("YTE",  size: 26, color: glyphTextActive)
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.top, 64)
-                .padding(.bottom, 8)
+                .padding(.top, 24) // Removed massive top padding (Safe Area handles top naturally)
+                .padding(.bottom, 12)
 
-                // ── Status ────────────────────────────────────────────────────
+                // ── Status (Scale: 7 -> 10) ──────────────────────────────────
                 PixelText(
                     bleManager.isConnected
                         ? "Your case is connected."
                         : "Your case isn't connected to your phone.",
-                    size: 7,
+                    size: 10,
                     color: glyphTextMuted
                 )
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 16)
-                .padding(.bottom, 24)
+                .padding(.bottom, 28)
 
-                // ── Connect / Disconnect button (BACKGROUND button style) ──────
+                // ── Connect / Disconnect button (Scale: 8 -> 12) ─────────────
                 Button {
                     bleManager.isConnected ? bleManager.disconnect() : bleManager.startScanning()
                 } label: {
-                    HStack(spacing: 12) {
+                    HStack(spacing: 16) {
                         Circle()
-                            .stroke(glyphTextActive, lineWidth: 1.5)
+                            .stroke(glyphTextActive, lineWidth: 2)
                             .background(bleManager.isConnected ? Circle().fill(glyphAccent) : nil)
-                            .frame(width: 10, height: 10)
+                            .frame(width: 14, height: 14)
                         
                         PixelText(
                             bleManager.isConnected ? "DISCONNECT" : "CONNECT",
-                            size: 8,
+                            size: 12,
                             color: glyphTextActive
                         )
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 14)
+                    .padding(.horizontal, 32)
+                    .padding(.vertical, 18)
                     .background(glyphCardBg)
                     .cornerRadius(8)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(glyphTextActive, lineWidth: 1.5)
+                            .stroke(glyphTextActive, lineWidth: 2)
                     )
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -132,28 +132,28 @@ struct HomeView: View {
                     Spacer()
                     Image(systemName: "magnifyingglass")
                         .foregroundColor(glyphTextActive)
-                        .font(.system(size: 20, weight: .bold))
+                        .font(.system(size: 28, weight: .bold)) // Enlarged search icon
                 }
                 .padding(.horizontal, 24)
-                .padding(.bottom, 12)
+                .padding(.bottom, 16)
 
-                // ── Section Title: WIDGETS
-                PixelText("WIDGETS", size: 6, color: glyphTextMuted)
+                // ── Section Title: WIDGETS (Scale: 6 -> 9)
+                PixelText("WIDGETS", size: 9, color: glyphTextMuted)
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 8)
+                    .padding(.bottom, 10)
 
-                // ── Primary Nav Widget Cells (FACES | TILES) ────────────────────
-                HStack(spacing: 12) {
+                // ── Primary Nav Widget Cells (FACES | TILES - Double Icon Size) 
+                HStack(spacing: 16) {
                     Button {
                         activeScreen = .faces
                     } label: {
-                        VStack(spacing: 12) {
+                        VStack(spacing: 16) {
                             PrimaryIconContainer(name: "icon_faces", isRobot: true)
-                                .frame(width: 42, height: 42)
-                            PixelText("FACES", size: 6, color: glyphTextMuted)
+                                .frame(width: 80, height: 80) // Doubled size
+                            PixelText("FACES", size: 9, color: glyphTextMuted)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 20)
+                        .padding(.vertical, 28)
                         .background(glyphCardBg)
                         .cornerRadius(8)
                         .overlay(
@@ -165,13 +165,13 @@ struct HomeView: View {
                     Button {
                         activeScreen = .tiles
                     } label: {
-                        VStack(spacing: 12) {
+                        VStack(spacing: 16) {
                             PrimaryIconContainer(name: "icon_tiles", isRobot: false)
-                                .frame(width: 42, height: 42)
-                            PixelText("TILES", size: 6, color: glyphTextMuted)
+                                .frame(width: 80, height: 80) // Doubled size
+                            PixelText("TILES", size: 9, color: glyphTextMuted)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 20)
+                        .padding(.vertical, 28)
                         .background(glyphCardBg)
                         .cornerRadius(8)
                         .overlay(
@@ -181,15 +181,15 @@ struct HomeView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.bottom, 24)
+                .padding(.bottom, 28)
 
-                // ── Section Title: SETTINGS
-                PixelText("SETTINGS", size: 6, color: glyphTextMuted)
+                // ── Section Title: SETTINGS (Scale: 6 -> 9)
+                PixelText("SETTINGS", size: 9, color: glyphTextMuted)
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 8)
+                    .padding(.bottom, 10)
 
-                // ── Secondary Nav Rows ─────────────────────────────────────────
-                VStack(spacing: 8) {
+                // ── Secondary Nav Rows (Enlarged CustomIconContainer circle sizes)
+                VStack(spacing: 10) {
                     HomeNavListRow(
                         icon: AnyView(CustomIconContainer(name: "icon_setting", fallbackSymbol: "gearshape.fill", fallbackAccentColor: glyphAccent)),
                         title: "SETTING",
@@ -238,7 +238,7 @@ struct HomeView: View {
     }
 }
 
-// MARK: - Home Navigation Row Helper
+// MARK: - Home Navigation Row Helper (Scaled Up)
 
 struct HomeNavListRow: View {
     let icon: AnyView
@@ -248,26 +248,26 @@ struct HomeNavListRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 16) {
+            HStack(spacing: 20) {
                 icon
                 VStack(alignment: .leading, spacing: 6) {
-                    PixelText(title, size: 7, color: glyphTextActive)
+                    PixelText(title, size: 10, color: glyphTextActive) // 7 -> 10
                     if let sub = subtitle {
-                        PixelText(sub, size: 5, color: glyphTextMuted)
+                        PixelText(sub, size: 8, color: glyphTextMuted) // 5 -> 8
                     }
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: 16, weight: .bold)) // Enlarged chevron
                     .foregroundColor(glyphTextMuted)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 16)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 18)
         }
     }
 }
 
-// MARK: - Faces View (Glyph scrollable Watch Face Layout)
+// MARK: - Faces View (Premium Scrollable Watch Face Layout - Scaled Up)
 
 struct FacesView: View {
     @EnvironmentObject var bleManager: BLEManager
@@ -295,156 +295,135 @@ struct FacesView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Back Header
+            // Back Header (Removed top 56 padding)
             HStack {
                 Button {
                     activeScreen = .home
                 } label: {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 10) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(.system(size: 20, weight: .bold))
                             .foregroundColor(glyphTextActive)
-                        PixelText("FACES", size: 9, color: glyphTextActive)
+                        PixelText("FACES", size: 14, color: glyphTextActive) // 9 -> 14
                     }
                 }
                 Spacer()
             }
             .padding(.horizontal, 16)
-            .padding(.top, 56)
+            .padding(.top, 16) // Substituted with a safe top margin
             .padding(.bottom, 16)
 
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 20) {
+                VStack(spacing: 24) {
 
-                    // 1. Section: PREVIEW
-                    VStack(alignment: .leading, spacing: 8) {
-                        PixelText("PREVIEW", size: 6, color: glyphTextMuted)
+                    // 1. Section: PREVIEW (Centered full-width layout)
+                    VStack(alignment: .leading, spacing: 10) {
+                        PixelText("PREVIEW", size: 9, color: glyphTextMuted) // 6 -> 9
                             .padding(.horizontal, 4)
 
-                        HStack(spacing: 20) {
-                            // Left Side: Circular Watch Face Preview
+                        // Full-width rectangular preview container
+                        ZStack {
+                            glyphCardBg
+                                .cornerRadius(8)
+
                             ZStack {
-                                Circle()
-                                    .fill(glyphBg)
-                                    .frame(width: 130, height: 130)
-                                    .overlay(Circle().stroke(Color.white.opacity(0.15), lineWidth: 1.5))
-
-                                ZStack {
-                                    switch activePreview {
-                                    case .clock(let style):
-                                        OLEDClockPreview(style: style)
-                                    case .emote(let index):
-                                        OLEDEmotePreview(gifName: emoteFaces[index].gif)
-                                    case .activity:
-                                        OLEDActivityPreview(healthKit: healthKit)
-                                    }
+                                switch activePreview {
+                                case .clock(let style):
+                                    OLEDClockPreview(style: style)
+                                case .emote(let index):
+                                    OLEDEmotePreview(gifName: emoteFaces[index].gif)
+                                case .activity:
+                                    OLEDActivityPreview(healthKit: healthKit)
                                 }
-                                .frame(width: 90, height: 45)
-                                .clipped()
                             }
-
-                            // Right Side: Title + Attributes + Carousel Indicator
-                            VStack(alignment: .leading, spacing: 8) {
-                                PixelText(previewTitle, size: 8, color: glyphTextActive)
-                                    .fixedSize(horizontal: false, vertical: true)
-
-                                PixelText(previewAttributes, size: 6, color: glyphTextMuted)
-
-                                // Carousel Dot indicators
-                                HStack(spacing: 6) {
-                                    Circle()
-                                        .fill(activeIndicatorIndex == 0 ? glyphAccent : glyphTextMuted.opacity(0.4))
-                                        .frame(width: 6, height: 6)
-                                    Circle()
-                                        .fill(activeIndicatorIndex == 1 ? glyphAccent : glyphTextMuted.opacity(0.4))
-                                        .frame(width: 6, height: 6)
-                                    Circle()
-                                        .fill(activeIndicatorIndex == 2 ? glyphAccent : glyphTextMuted.opacity(0.4))
-                                        .frame(width: 6, height: 6)
-                                }
-                                .padding(.top, 4)
-                            }
-                            Spacer()
+                            .scaleEffect(1.3) // Perfectly centered and enlarged content
                         }
-                        .padding(16)
-                        .background(glyphCardBg)
-                        .cornerRadius(8)
+                        .frame(height: 160)
+                        .frame(maxWidth: .infinity)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.white.opacity(0.05), lineWidth: 1)
+                                .stroke(Color.white.opacity(0.15), lineWidth: 1.5)
                         )
+
+                        // Selected watch face title & details positioned directly below the box
+                        VStack(alignment: .leading, spacing: 6) {
+                            PixelText(previewTitle, size: 12, color: glyphTextActive) // 8 -> 12
+                            PixelText(previewAttributes, size: 9, color: glyphTextMuted) // 6 -> 9
+                        }
+                        .padding(.top, 4)
+                        .padding(.horizontal, 4)
                     }
                     .padding(.horizontal, 16)
 
-                    // 2. Section: CLOCK
-                    VStack(alignment: .leading, spacing: 8) {
-                        PixelText("CLOCK", size: 6, color: glyphTextMuted)
+                    // 2. Section: CLOCK (Enlarged select items & buttons)
+                    VStack(alignment: .leading, spacing: 10) {
+                        PixelText("CLOCK", size: 9, color: glyphTextMuted)
                             .padding(.horizontal, 4)
 
-                        VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 20) {
                             HStack {
-                                PixelText("CLOCK WIDGETS", size: 6, color: glyphTextActive)
+                                PixelText("CLOCK WIDGETS", size: 9, color: glyphTextActive)
                                 Spacer()
                                 Button {
                                     bleManager.syncTime()
                                 } label: {
-                                    HStack(spacing: 6) {
+                                    HStack(spacing: 8) {
                                         Image(systemName: "clock.arrow.2.circlepath")
-                                            .font(.system(size: 10, weight: .bold))
+                                            .font(.system(size: 14, weight: .bold))
                                             .foregroundColor(.black)
-                                        PixelText("SYNC TIME", size: 5, color: .black)
+                                        PixelText("SYNC TIME", size: 8, color: .black) // 5 -> 8
                                     }
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 8)
                                     .background(glyphTextActive)
-                                    .cornerRadius(4)
+                                    .cornerRadius(6)
                                 }
                                 .disabled(!bleManager.isConnected)
                                 .opacity(bleManager.isConnected ? 1.0 : 0.4)
                             }
 
                             ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 14) {
+                                HStack(spacing: 20) { // Increased spacing
                                     ForEach(clockFaces, id: \.style) { face in
                                         Button {
                                             selectedClockStyle = face.style
                                             activePreview = .clock(face.style)
                                             if bleManager.isConnected { bleManager.sendMode(0) }
                                         } label: {
-                                            VStack(spacing: 8) {
-                                                // Square with small cornerRadius option view
+                                            VStack(spacing: 10) {
+                                                // Enlarged option box (80 -> 120)
                                                 ZStack {
                                                     glyphBg
-                                                        .cornerRadius(6)
+                                                        .cornerRadius(8)
                                                     
                                                     OLEDClockPreview(style: face.style)
-                                                        .frame(width: 64, height: 32)
+                                                        .frame(width: 96, height: 48) // Enlarged layout
                                                         .clipped()
                                                 }
-                                                .frame(width: 80, height: 80)
+                                                .frame(width: 120, height: 120)
                                                 .overlay(
-                                                    RoundedRectangle(cornerRadius: 6)
-                                                        .stroke(selectedClockStyle == face.style ? glyphTextActive : Color.clear, lineWidth: 1.5)
+                                                    RoundedRectangle(cornerRadius: 8)
+                                                        .stroke(selectedClockStyle == face.style ? glyphTextActive : Color.clear, lineWidth: 2)
                                                 )
                                                 
-                                                VStack(spacing: 4) {
-                                                    PixelText(face.label, size: 5, color: selectedClockStyle == face.style ? glyphTextActive : glyphTextMuted)
+                                                VStack(spacing: 6) {
+                                                    PixelText(face.label, size: 8, color: selectedClockStyle == face.style ? glyphTextActive : glyphTextMuted)
                                                     if selectedClockStyle == face.style {
                                                         Circle()
                                                             .fill(glyphAccent)
-                                                            .frame(width: 4, height: 4)
+                                                            .frame(width: 6, height: 6) // Enlarged accent dot
                                                     } else {
-                                                        Spacer().frame(height: 4)
+                                                        Spacer().frame(height: 6)
                                                     }
                                                 }
                                             }
                                         }
                                     }
                                 }
-                                .padding(.vertical, 4)
+                                .padding(.vertical, 6)
                             }
                         }
-                        .padding(16)
+                        .padding(18)
                         .background(glyphCardBg)
                         .cornerRadius(8)
                         .overlay(
@@ -455,52 +434,53 @@ struct FacesView: View {
                     .padding(.horizontal, 16)
 
                     // 3. Section: EMOTE
-                    VStack(alignment: .leading, spacing: 8) {
-                        PixelText("EMOTE", size: 6, color: glyphTextMuted)
+                    VStack(alignment: .leading, spacing: 10) {
+                        PixelText("EMOTE", size: 9, color: glyphTextMuted)
                             .padding(.horizontal, 4)
 
-                        VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 20) {
                             ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 14) {
+                                HStack(spacing: 20) { // Increased spacing
                                     ForEach(Array(emoteFaces.enumerated()), id: \.offset) { idx, face in
                                         Button {
                                             selectedEmoteIndex = idx
                                             activePreview = .emote(idx)
                                             if bleManager.isConnected { bleManager.sendMode(1) }
                                         } label: {
-                                            VStack(spacing: 8) {
+                                            VStack(spacing: 10) {
+                                                // Enlarged emote option box (80 -> 120)
                                                 ZStack {
                                                     glyphBg
-                                                        .cornerRadius(6)
+                                                        .cornerRadius(8)
 
                                                     GifImageView(name: face.gif)
-                                                        .frame(width: 64, height: 64)
-                                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                                        .frame(width: 90, height: 90) // Doubled layout
+                                                        .clipShape(RoundedRectangle(cornerRadius: 8))
                                                 }
-                                                .frame(width: 80, height: 80)
+                                                .frame(width: 120, height: 120)
                                                 .overlay(
-                                                    RoundedRectangle(cornerRadius: 6)
-                                                        .stroke(selectedEmoteIndex == idx ? glyphTextActive : Color.clear, lineWidth: 1.5)
+                                                    RoundedRectangle(cornerRadius: 8)
+                                                        .stroke(selectedEmoteIndex == idx ? glyphTextActive : Color.clear, lineWidth: 2)
                                                 )
 
-                                                VStack(spacing: 4) {
-                                                    PixelText(face.label, size: 5, color: selectedEmoteIndex == idx ? glyphTextActive : glyphTextMuted)
+                                                VStack(spacing: 6) {
+                                                    PixelText(face.label, size: 8, color: selectedEmoteIndex == idx ? glyphTextActive : glyphTextMuted)
                                                     if selectedEmoteIndex == idx {
                                                         Circle()
                                                             .fill(glyphAccent)
-                                                            .frame(width: 4, height: 4)
+                                                            .frame(width: 6, height: 6)
                                                     } else {
-                                                        Spacer().frame(height: 4)
+                                                        Spacer().frame(height: 6)
                                                     }
                                                 }
                                             }
                                         }
                                     }
                                 }
-                                .padding(.vertical, 4)
+                                .padding(.vertical, 6)
                             }
                         }
-                        .padding(16)
+                        .padding(18)
                         .background(glyphCardBg)
                         .cornerRadius(8)
                         .overlay(
@@ -510,14 +490,14 @@ struct FacesView: View {
                     }
                     .padding(.horizontal, 16)
 
-                    // 4. Section: ACTIVITY
-                    VStack(alignment: .leading, spacing: 8) {
-                        PixelText("ACTIVITY", size: 6, color: glyphTextMuted)
+                    // 4. Section: ACTIVITY (Sync logic & health labels scaled)
+                    VStack(alignment: .leading, spacing: 10) {
+                        PixelText("ACTIVITY", size: 9, color: glyphTextMuted)
                             .padding(.horizontal, 4)
 
-                        VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 20) {
                             HStack {
-                                PixelText("LIVE HEALTH METRICS", size: 6, color: glyphTextActive)
+                                PixelText("LIVE HEALTH METRICS", size: 9, color: glyphTextActive)
                                 Spacer()
                                 Button {
                                     healthKit.fetchAllMetrics()
@@ -533,11 +513,11 @@ struct FacesView: View {
                                         )
                                     }
                                 } label: {
-                                    PixelText("SYNC TO OLED", size: 5, color: .black)
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 6)
+                                    PixelText("SYNC TO OLED", size: 8, color: .black) // 5 -> 8
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 8)
                                         .background(glyphTextActive)
-                                        .cornerRadius(4)
+                                        .cornerRadius(6)
                                 }
                             }
 
@@ -545,31 +525,31 @@ struct FacesView: View {
                                 Button {
                                     healthKit.requestAuthorization { _ in }
                                 } label: {
-                                    PixelText("GRANT HEALTHKIT ACCESS", size: 6, color: .white)
+                                    PixelText("GRANT HEALTHKIT ACCESS", size: 10, color: .white) // 6 -> 10
                                         .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 12)
+                                        .padding(.vertical, 16)
                                         .background(glyphAccent)
-                                        .cornerRadius(4)
+                                        .cornerRadius(6)
                                 }
                             }
 
                             VStack(spacing: 0) {
-                                ActivityRow(icon: "figure.walk", assetName: "icon_steps", label: "STEPS", value: "\(healthKit.stepCount)", unit: "STEPS", accent: glyphTextActive)
+                                ActivityRow(icon: "figure.walk", assetName: "icon_steps", label: "STEPS", value: "\(healthKit.stepCount)", unit: "STEPS", accent: pixelBlue)
                                 Divider().background(Color.white.opacity(0.05))
                                 ActivityRow(icon: "heart.fill", assetName: "icon_heartrate", label: "HEART RATE", value: "\(healthKit.heartRate)", unit: "BPM", accent: glyphAccent)
                                 Divider().background(Color.white.opacity(0.05))
                                 ActivityRow(icon: "flame.fill", assetName: "icon_calories", label: "CALORIES", value: "\(healthKit.activeCalories)", unit: "KCAL", accent: glyphAccent)
                                 Divider().background(Color.white.opacity(0.05))
-                                ActivityRow(icon: "battery.100", assetName: "icon_battery", label: "BATTERY", value: "\(bleManager.batteryLevel)%", unit: "CASE", accent: glyphTextActive)
+                                ActivityRow(icon: "battery.100", assetName: "icon_battery", label: "BATTERY", value: "\(bleManager.batteryLevel)%", unit: "CASE", accent: pixelBlue)
                             }
                             .background(glyphBg)
-                            .cornerRadius(6)
+                            .cornerRadius(8)
                             .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.white.opacity(0.1), lineWidth: 1.5)
                             )
                         }
-                        .padding(16)
+                        .padding(18)
                         .background(glyphCardBg)
                         .cornerRadius(8)
                         .overlay(
@@ -578,7 +558,7 @@ struct FacesView: View {
                         )
                     }
                     .padding(.horizontal, 16)
-                    .padding(.bottom, 24)
+                    .padding(.bottom, 32)
                 }
             }
         }
@@ -624,7 +604,7 @@ struct FacesView: View {
     }
 }
 
-// MARK: - Activity Row
+// MARK: - Activity Row (Scaled Up)
 
 struct ActivityRow: View {
     let icon: String
@@ -635,34 +615,34 @@ struct ActivityRow: View {
     let accent: Color
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 16) {
             if let uiImage = UIImage(named: assetName) {
                 Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFit()
                     .foregroundColor(accent)
-                    .frame(width: 20, height: 20)
-                    .frame(width: 24)
+                    .frame(width: 28, height: 28) // Enlarged custom icon
+                    .frame(width: 36)
             } else {
                 Image(systemName: icon)
-                    .font(.system(size: 14, weight: .black))
+                    .font(.system(size: 24, weight: .black)) // Enlarged SF Symbol
                     .foregroundColor(accent)
-                    .frame(width: 24)
+                    .frame(width: 36)
             }
 
-            PixelText(label, size: 5, color: glyphTextMuted)
+            PixelText(label, size: 8, color: glyphTextMuted) // 5 -> 8
 
             Spacer()
 
-            PixelText(value, size: 7, color: glyphTextActive)
-            PixelText(unit, size: 5, color: glyphTextMuted)
+            PixelText(value, size: 14, color: glyphTextActive) // 7 -> 14
+            PixelText(unit, size: 8, color: glyphTextMuted) // 5 -> 8
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 16) // Enlarged padding
     }
 }
 
-// MARK: - Settings Page
+// MARK: - Settings Page (Scaled Up)
 
 struct SettingsPage: View {
     @EnvironmentObject var bleManager: BLEManager
@@ -678,50 +658,50 @@ struct SettingsPage: View {
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.system(size: 20, weight: .bold))
                         .foregroundColor(glyphTextActive)
-                    PixelText("SETTINGS", size: 8, color: glyphTextActive)
+                    PixelText("SETTINGS", size: 12, color: glyphTextActive) // 8 -> 12
                 }
             }
-            .padding(.top, 56)
+            .padding(.top, 16) // Removed top 56 padding
             .padding(.horizontal, 16)
-            .padding(.bottom, 20)
+            .padding(.bottom, 24)
 
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 16) {
+                VStack(spacing: 20) {
                     VStack(spacing: 0) {
                         // Notifications
                         HStack {
-                            PixelText("NOTIFICATIONS", size: 7, color: glyphTextActive)
+                            PixelText("NOTIFICATIONS", size: 10, color: glyphTextActive) // 7 -> 10
                             Spacer()
                             Toggle("", isOn: $notificationsOn)
                                 .toggleStyle(SwitchToggleStyle(tint: glyphAccent))
                                 .labelsHidden()
                         }
-                        .padding(16)
+                        .padding(18)
                         Divider().background(Color.white.opacity(0.05))
 
                         // Brightness
-                        VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 12) {
                             HStack {
-                                PixelText("BRIGHTNESS", size: 7, color: glyphTextActive)
+                                PixelText("BRIGHTNESS", size: 10, color: glyphTextActive) // 7 -> 10
                                 Spacer()
-                                PixelText("\(Int(brightness * 100))%", size: 6, color: glyphTextMuted)
+                                PixelText("\(Int(brightness * 100))%", size: 8, color: glyphTextMuted) // 6 -> 8
                             }
                             Slider(value: $brightness).accentColor(glyphAccent)
                         }
-                        .padding(16)
+                        .padding(18)
                         Divider().background(Color.white.opacity(0.05))
 
                         // Health Sync
                         HStack {
-                            PixelText("HEALTH SYNC", size: 7, color: glyphTextActive)
+                            PixelText("HEALTH SYNC", size: 10, color: glyphTextActive) // 7 -> 10
                             Spacer()
                             Toggle("", isOn: $healthSyncOn)
                                 .toggleStyle(SwitchToggleStyle(tint: glyphAccent))
                                 .labelsHidden()
                         }
-                        .padding(16)
+                        .padding(18)
                     }
                     .background(glyphCardBg)
                     .cornerRadius(8)
@@ -737,7 +717,7 @@ struct SettingsPage: View {
     }
 }
 
-// MARK: - Generic Simple Page
+// MARK: - Generic Simple Page (Scaled Up)
 
 struct SimplePage: View {
     let title: String
@@ -751,23 +731,23 @@ struct SimplePage: View {
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.system(size: 20, weight: .bold))
                         .foregroundColor(glyphTextActive)
-                    PixelText(title, size: 8, color: glyphTextActive)
+                    PixelText(title, size: 12, color: glyphTextActive) // 8 -> 12
                 }
             }
-            .padding(.top, 56)
+            .padding(.top, 16) // Removed top 56 padding
             .padding(.horizontal, 16)
-            .padding(.bottom, 20)
+            .padding(.bottom, 24)
 
             Spacer()
             Image(systemName: icon)
-                .font(.system(size: 60))
+                .font(.system(size: 80)) // Enlarged
                 .foregroundColor(glyphTextMuted)
                 .frame(maxWidth: .infinity)
-            PixelText("COMING SOON", size: 8, color: glyphTextMuted)
+            PixelText("COMING SOON", size: 12, color: glyphTextMuted) // 8 -> 12
                 .frame(maxWidth: .infinity)
-                .padding(.top, 20)
+                .padding(.top, 24)
             Spacer()
         }
         .background(glyphBg)
@@ -1047,51 +1027,53 @@ struct PixelDivider: View {
     }
 }
 
-// MARK: - Modern Vector Icons for Home Screen
+// MARK: - Modern Vector Icons for Home Screen (Doubled in Size)
 
 struct ModernRobotIcon: View {
     var body: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: 4) {
+            // Antenna with red dot
             ZStack {
-                Rectangle().fill(Color.red).frame(width: 4, height: 4)
-                    .offset(y: -4)
-                Rectangle().fill(Color(white: 0.5)).frame(width: 2, height: 6)
+                Rectangle().fill(Color.red).frame(width: 8, height: 8)
+                    .offset(y: -8)
+                Rectangle().fill(Color(white: 0.5)).frame(width: 4, height: 12)
             }
+            // Head (Doubled dimensions)
             ZStack {
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color(white: 0.5), lineWidth: 2.5)
-                    .frame(width: 32, height: 24)
-                HStack(spacing: 4) {
-                    RoundedRectangle(cornerRadius: 1)
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color(white: 0.5), lineWidth: 4)
+                    .frame(width: 64, height: 48)
+                HStack(spacing: 8) {
+                    RoundedRectangle(cornerRadius: 2)
                         .fill(Color(white: 0.5))
-                        .frame(width: 5, height: 5)
-                    RoundedRectangle(cornerRadius: 1)
+                        .frame(width: 10, height: 10)
+                    RoundedRectangle(cornerRadius: 2)
                         .fill(Color(white: 0.5))
-                        .frame(width: 5, height: 5)
+                        .frame(width: 10, height: 10)
                 }
             }
         }
-        .frame(width: 42, height: 42)
+        .frame(width: 80, height: 80)
     }
 }
 
 struct ModernGridIcon: View {
     var body: some View {
-        VStack(spacing: 4) {
-            HStack(spacing: 4) {
-                RoundedRectangle(cornerRadius: 1.5).stroke(Color(white: 0.5), lineWidth: 2).frame(width: 12, height: 12)
-                RoundedRectangle(cornerRadius: 1.5).stroke(Color(white: 0.5), lineWidth: 2).frame(width: 12, height: 12)
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 3).stroke(Color(white: 0.5), lineWidth: 3).frame(width: 24, height: 24)
+                RoundedRectangle(cornerRadius: 3).stroke(Color(white: 0.5), lineWidth: 3).frame(width: 24, height: 24)
             }
-            HStack(spacing: 4) {
-                RoundedRectangle(cornerRadius: 1.5).stroke(Color(white: 0.5), lineWidth: 2).frame(width: 12, height: 12)
-                RoundedRectangle(cornerRadius: 1.5).stroke(Color(white: 0.5), lineWidth: 2).frame(width: 12, height: 12)
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 3).stroke(Color(white: 0.5), lineWidth: 3).frame(width: 24, height: 24)
+                RoundedRectangle(cornerRadius: 3).stroke(Color(white: 0.5), lineWidth: 3).frame(width: 24, height: 24)
             }
         }
-        .frame(width: 42, height: 42)
+        .frame(width: 80, height: 80)
     }
 }
 
-// MARK: - Custom Icon Container (loads bundle assets or falls back to system designs)
+// MARK: - Custom Icon Container (loads bundle assets or falls back to system designs - Doubled)
 
 struct CustomIconContainer: View {
     let name: String
@@ -1104,28 +1086,28 @@ struct CustomIconContainer: View {
         ZStack {
             Circle()
                 .fill(Color(white: 0.12))
-                .frame(width: 38, height: 38)
+                .frame(width: 56, height: 56) // Increased from 38 to 56
             
             if let uiImage = UIImage(named: name) {
                 Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 22, height: 22)
+                    .frame(width: 32, height: 32) // Increased from 22 to 32
             } else {
                 // Fallback to vector/SF Symbol
                 if fallbackIsBag {
                     ZStack {
                         Image(systemName: "bag.fill")
-                            .font(.system(size: 16))
+                            .font(.system(size: 24)) // Increased from 16 to 24
                             .foregroundColor(glyphTextMuted)
                         Image(systemName: "bag")
-                            .font(.system(size: 16))
+                            .font(.system(size: 24))
                             .foregroundColor(fallbackAccentColor)
                     }
                 } else {
                     ZStack {
                         Image(systemName: fallbackSymbol)
-                            .font(.system(size: 16))
+                            .font(.system(size: 24)) // Increased from 16 to 24
                             .foregroundColor(glyphTextMuted)
                         
                         if fallbackAccentBottom {
@@ -1133,23 +1115,23 @@ struct CustomIconContainer: View {
                                 Spacer()
                                 Rectangle()
                                     .fill(fallbackAccentColor)
-                                    .frame(width: 5, height: 2.5)
-                                    .padding(.bottom, 11)
+                                    .frame(width: 8, height: 4) // Doubled size
+                                    .padding(.bottom, 16)
                             }
                         } else {
                             Circle()
                                 .fill(fallbackAccentColor)
-                                .frame(width: 4, height: 4)
+                                .frame(width: 7, height: 7) // Doubled size
                         }
                     }
                 }
             }
         }
-        .frame(width: 38, height: 38)
+        .frame(width: 56, height: 56)
     }
 }
 
-// MARK: - Primary Navigation Icon Container
+// MARK: - Primary Navigation Icon Container (Doubled)
 
 struct PrimaryIconContainer: View {
     let name: String
@@ -1160,7 +1142,7 @@ struct PrimaryIconContainer: View {
             Image(uiImage: uiImage)
                 .resizable()
                 .scaledToFit()
-                .frame(width: 38, height: 38)
+                .frame(width: 80, height: 80) // Doubled from 38/42 to 80
         } else {
             if isRobot {
                 ModernRobotIcon()
