@@ -253,3 +253,20 @@ void renderActivity(uint32_t steps, uint16_t bpm, uint16_t calories) {
         u8g2.drawStr(0, 63, "waiting...");
     }
 }
+
+void renderNotification(const char* appName, const char* senderName) {
+    u8g2.clearBuffer();
+    
+    // Draw App Name
+    u8g2.setFont(u8g2_font_6x10_tf);
+    int appWidth = u8g2.getStrWidth(appName);
+    u8g2.drawStr((128 - appWidth) / 2, 20, appName);
+    
+    // Draw separator
+    u8g2.drawLine(20, 26, 108, 26);
+    
+    // Draw Sender Name (larger text)
+    u8g2.setFont(u8g2_font_9x15_tf);
+    int senderWidth = u8g2.getStrWidth(senderName);
+    u8g2.drawStr((128 - senderWidth) / 2, 45, senderName);
+}

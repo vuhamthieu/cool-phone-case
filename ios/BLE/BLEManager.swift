@@ -1,5 +1,6 @@
 import Foundation
 import CoreBluetooth
+import SwiftUI
 
 class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeripheralDelegate {
 
@@ -8,6 +9,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     static let modeCharacteristicUUID       = CBUUID(string: "beb5483e-36e1-4688-b7f5-ea07361b26a8")
     static let timeCharacteristicUUID       = CBUUID(string: "e3223119-944c-477c-abf1-efac3e8b15d0")
     static let clockStyleCharacteristicUUID = CBUUID(string: "c5b6a7d8-e9f0-1234-abcd-ef1234567890")
+    static let settingsCharacteristicUUID   = CBUUID(string: "d4b6a7d8-e9f0-1234-abcd-ef1234567891")
 
     // Standard GATT Battery service and characteristic UUIDs
     static let batteryServiceUUID        = CBUUID(string: "180F")
@@ -20,10 +22,14 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     @Published var activePeripheral: CBPeripheral?
     @Published var batteryLevel: Int      = 100
 
+    @AppStorage("isNotificationEnabled") var isNotificationEnabled = true
+    @AppStorage("isMediaControlEnabled") var isMediaControlEnabled = true
+
     private var centralManager: CBCentralManager!
     private var modeCharacteristic: CBCharacteristic?
     private var timeCharacteristic: CBCharacteristic?
     private var clockStyleCharacteristic: CBCharacteristic?
+    private var settingsCharacteristic: CBCharacteristic?
     private var batteryCharacteristic: CBCharacteristic?
 
     override init() {
@@ -105,7 +111,23 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         let data = Data(bytes: &val, count: 1)
         peripheral.writeValue(data, for: char, type: .withResponse)
         print("BLE: Sent clock style \(style) to ESP32")
-    } // MARK: - CBCentralManagerDelegate
+    }
+
+    /// Send smart settings to ESP32 (bit 0 = Notifications, bit 1 = Media)
+    func sendSettings() {
+        guard let peripheral = activePeripheral, let char = settingsCharacteristic else {
+            return
+        }
+        var flags: UInt8 = 0
+        if isNotificationEnabled { flags |= 1 << 0 }
+        if isMediaControlEnabled { flags |= 1 << 1 }
+        
+        let data = Data(bytes: &flags, count: 1)
+        peripheral.writeValue(data, for: char, type: .withResponse)
+        print("BLE: Sent settings flags \(flags) to ESP32")
+    } 
+    
+    // MARK: - CBCentralManagerDelegate
 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         if central.state == .poweredOn {
@@ -147,6 +169,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         modeCharacteristic       = nil
         timeCharacteristic       = nil
         clockStyleCharacteristic = nil
+        settingsCharacteristic   = nil
         batteryCharacteristic    = nil
         activePeripheral         = nil
         connectionStatusText     = "Disconnected"
@@ -164,7 +187,8 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
                     peripheral.discoverCharacteristics(
                         [Self.modeCharacteristicUUID,
                          Self.timeCharacteristicUUID,
-                         Self.clockStyleCharacteristicUUID],
+                         Self.clockStyleCharacteristicUUID,
+                         Self.settingsCharacteristicUUID],
                         for: service
                     )
                 } else if service.uuid == Self.batteryServiceUUID {
@@ -190,6 +214,10 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
                 } else if characteristic.uuid == Self.clockStyleCharacteristicUUID {
                     clockStyleCharacteristic = characteristic
                     print("Found Clock Style Characteristic")
+                } else if characteristic.uuid == Self.settingsCharacteristicUUID {
+                    settingsCharacteristic = characteristic
+                    print("Found Settings Characteristic")
+                    sendSettings()
                 } else if characteristic.uuid == Self.batteryCharacteristicUUID {
                     batteryCharacteristic = characteristic
                     print("Found Battery Characteristic")

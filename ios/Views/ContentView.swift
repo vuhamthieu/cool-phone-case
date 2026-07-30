@@ -48,7 +48,7 @@ struct ContentView: View {
                     selectedClockStyle: $selectedClockStyle,
                     selectedEmoteIndex: $selectedEmoteIndex
                 )
-            case .tiles:    SimplePage(title: "TILES", icon: "square.grid.2x2", activeScreen: $activeScreen)
+            case .tiles:    TilesView(activeScreen: $activeScreen)
             case .settings: SettingsPage(activeScreen: $activeScreen)
             case .tips:     SimplePage(title: "USER GUIDE", icon: "lightbulb", activeScreen: $activeScreen)
             case .store:    SimplePage(title: "STORE", icon: "bag", activeScreen: $activeScreen)

@@ -7,6 +7,13 @@
 #define CHARACTERISTIC_MODE_UUID      "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 #define CHARACTERISTIC_TIME_UUID      "e3223119-944c-477c-abf1-efac3e8b15d0"
 #define CHARACTERISTIC_CLOCK_STYLE_UUID "c5b6a7d8-e9f0-1234-abcd-ef1234567890"
+#define CHARACTERISTIC_SETTINGS_UUID    "d4b6a7d8-e9f0-1234-abcd-ef1234567891"
+
+// ANCS UUIDs
+#define ANCS_SERVICE_UUID         "7905F431-B5CE-4E99-A40F-4B1E122D00D0"
+#define ANCS_NOTIF_SRC_UUID       "9FBF120D-6301-42D9-8C58-25E699A21DBD"
+#define ANCS_CTRL_PT_UUID         "69D1D8F3-45E1-49A8-9821-9BBDFDAAD9D9"
+#define ANCS_DATA_SRC_UUID        "22EAC6E9-24D6-4BB5-BE44-B36ACE7C7BFB"
 
 // Wi-Fi Config for OTA only
 #if __has_include("secrets.h")
@@ -46,6 +53,15 @@ extern MochiEmotion currentMochiEmotion;
 extern volatile bool modeChangedFlag;
 extern volatile bool touchTriggeredFlag;
 extern bool timeSynced;
+
+// Settings Flags
+extern bool notificationsEnabled;
+extern bool mediaControlEnabled;
+
+// Notification State
+extern volatile bool hasNewNotification;
+extern char notificationApp[32];
+extern char notificationSender[64];
 
 // Battery & Multitasking States
 extern volatile bool isLowBattery;

@@ -26,3 +26,6 @@ void renderActivity(uint32_t steps, uint16_t bpm, uint16_t calories);
 
 // Render the blinking low battery override screen
 void drawLowBatteryScreen(bool blinkState);
+
+// Notification
+void renderNotification(const char* appName, const char* senderName);

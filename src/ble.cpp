@@ -9,16 +9,40 @@ static bool isConnected = false;
 // ─────────────────────────────────────────────────────────────────────────────
 // Server connection callbacks
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// ANCS Task Declaration
+// ─────────────────────────────────────────────────────────────────────────────
+void ancsTask(void *pvParameters);
+static NimBLEAddress connectedPeerAddress;
+static bool shouldStartANCS = false;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Server connection callbacks
+// ─────────────────────────────────────────────────────────────────────────────
 class ServerCallbacks: public NimBLEServerCallbacks {
-    void onConnect(NimBLEServer* pServer) override {
+    void onConnect(NimBLEServer* pServer, ble_gap_conn_desc* desc) override {
         isConnected = true;
-        Serial.println("iOS App Connected via BLE");
+        connectedPeerAddress = NimBLEAddress(desc->peer_ota_addr);
+        Serial.printf("iOS App Connected via BLE: %s\n", connectedPeerAddress.toString().c_str());
+        
+        // If already bonded, start ANCS client
+        if (pServer->getPeerInfo(desc->conn_handle).isBonded()) {
+            Serial.println("Device is already bonded, queuing ANCS start.");
+            shouldStartANCS = true;
+        }
     }
 
-    void onDisconnect(NimBLEServer* pServer) override {
+    void onDisconnect(NimBLEServer* pServer, ble_gap_conn_desc* desc) override {
         isConnected = false;
+        shouldStartANCS = false;
         Serial.println("iOS App Disconnected");
         NimBLEDevice::getAdvertising()->start();
+    }
+
+    void onAuthenticationComplete(ble_gap_conn_desc* desc) override {
+        if (!isConnected) return;
+        Serial.println("BLE Authentication Complete! Queuing ANCS start.");
+        shouldStartANCS = true;
     }
 };
 
@@ -91,12 +115,33 @@ class ClockStyleCallback: public NimBLECharacteristicCallbacks {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Settings characteristic: bit 0 = Notifications, bit 1 = Media
+// ─────────────────────────────────────────────────────────────────────────────
+class SettingsCallback: public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic *pCharacteristic) override {
+        std::string rxValue = pCharacteristic->getValue();
+        if (rxValue.length() > 0) {
+            uint8_t flags = rxValue[0];
+            notificationsEnabled = (flags & 0x01) != 0;
+            mediaControlEnabled = (flags & 0x02) != 0;
+            Serial.printf("Settings updated: Notifications=%d, Media=%d\n", notificationsEnabled, mediaControlEnabled);
+        }
+    }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // BLE initialisation
 // ─────────────────────────────────────────────────────────────────────────────
 static NimBLECharacteristic* pBatteryLevelChar = nullptr;
 
 void bleInit() {
     NimBLEDevice::init("OverByte");
+
+    // Enable Security for ANCS (Bonding)
+    NimBLEDevice::setSecurityAuth(true, true, true);
+    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
+    NimBLEDevice::setSecurityInitKey(BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID);
+    NimBLEDevice::setSecurityRespKey(BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID);
 
     NimBLEServer *pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(new ServerCallbacks());
@@ -124,6 +169,13 @@ void bleInit() {
     );
     pClockStyleChar->setCallbacks(new ClockStyleCallback());
 
+    // Settings characteristic
+    NimBLECharacteristic *pSettingsChar = pService->createCharacteristic(
+        CHARACTERISTIC_SETTINGS_UUID,
+        NIMBLE_PROPERTY::WRITE
+    );
+    pSettingsChar->setCallbacks(new SettingsCallback());
+
     pService->start();
 
     // Standard GATT Battery Service (0x180F) & Battery Level Characteristic (0x2A19)
@@ -143,6 +195,17 @@ void bleInit() {
     pAdvertising->start();
 
     Serial.println("BLE Initialized. Advertising: OverByte (Control + Battery)");
+
+    // Spawn ANCS Background Task
+    xTaskCreatePinnedToCore(
+        ancsTask,
+        "ANCS_Task",
+        4096,
+        NULL,
+        1,
+        NULL,
+        0
+    );
 }
 
 bool bleIsConnected() {
@@ -156,5 +219,118 @@ void bleUpdateBattery(uint8_t percent) {
             pBatteryLevelChar->notify();
             Serial.printf("BLE: Notified battery percentage: %d%%\n", percent);
         }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ANCS Client Task and Callbacks
+// ─────────────────────────────────────────────────────────────────────────────
+static NimBLEClient* pANCSClient = nullptr;
+static NimBLERemoteCharacteristic* pControlPoint = nullptr;
+static NimBLERemoteCharacteristic* pDataSource = nullptr;
+
+static void notifyCB(NimBLERemoteCharacteristic* pRemoteCharacteristic, uint8_t* pData, size_t length, bool isNotify) {
+    if (!notificationsEnabled) return;
+
+    if (pRemoteCharacteristic->getUUID().equals(NimBLEUUID(ANCS_NOTIF_SRC_UUID))) {
+        if (length >= 8) {
+            uint8_t eventID = pData[0];
+            uint32_t notifUID = pData[4] | (pData[5] << 8) | (pData[6] << 16) | (pData[7] << 24);
+
+            // 0 = Added, 1 = Modified, 2 = Removed
+            if (eventID == 0 || eventID == 1) { 
+                Serial.printf("ANCS: New Notification UID: %u\n", notifUID);
+                if (pControlPoint != nullptr) {
+                    uint8_t cmd[8];
+                    cmd[0] = 0; // CommandIDGetNotificationAttributes
+                    cmd[1] = pData[4]; cmd[2] = pData[5]; cmd[3] = pData[6]; cmd[4] = pData[7]; // UID
+                    cmd[5] = 0; // AppIdentifier
+                    cmd[6] = 1; // Title
+                    cmd[7] = 32; // Max Title Len
+                    pControlPoint->writeValue(cmd, 8, true);
+                }
+            }
+        }
+    } else if (pRemoteCharacteristic->getUUID().equals(NimBLEUUID(ANCS_DATA_SRC_UUID))) {
+        if (length > 5 && pData[0] == 0) { // CommandIDGetNotificationAttributes
+            size_t idx = 5;
+            memset((void*)notificationApp, 0, sizeof(notificationApp));
+            memset((void*)notificationSender, 0, sizeof(notificationSender));
+            bool hasData = false;
+
+            while (idx < length) {
+                uint8_t attrID = pData[idx++];
+                if (idx + 1 >= length) break;
+                uint16_t attrLen = pData[idx] | (pData[idx+1] << 8);
+                idx += 2;
+                if (idx + attrLen > length) break;
+
+                if (attrID == 0) { // AppIdentifier
+                    char bundleID[128] = {0};
+                    size_t cpyLen = (attrLen < sizeof(bundleID) - 1) ? attrLen : sizeof(bundleID) - 1;
+                    memcpy(bundleID, &pData[idx], cpyLen);
+                    
+                    // User Request: Use strrchr to slice the bundle ID
+                    char* lastDot = strrchr(bundleID, '.');
+                    if (lastDot != nullptr && *(lastDot + 1) != '\0') {
+                        strncpy((char*)notificationApp, lastDot + 1, sizeof(notificationApp) - 1);
+                    } else {
+                        strncpy((char*)notificationApp, bundleID, sizeof(notificationApp) - 1);
+                    }
+                    hasData = true;
+                } else if (attrID == 1) { // Title
+                    size_t cpyLen = (attrLen < sizeof(notificationSender) - 1) ? attrLen : sizeof(notificationSender) - 1;
+                    memcpy((void*)notificationSender, &pData[idx], cpyLen);
+                    hasData = true;
+                }
+                idx += attrLen;
+            }
+
+            if (hasData) {
+                if (strlen(notificationSender) == 0) {
+                    strncpy((char*)notificationSender, "Notification", sizeof(notificationSender)-1);
+                }
+                Serial.printf("ANCS Parsed -> App: %s, Sender: %s\n", notificationApp, notificationSender);
+                hasNewNotification = true;
+            }
+        }
+    }
+}
+
+void ancsTask(void *pvParameters) {
+    while (true) {
+        if (shouldStartANCS && isConnected) {
+            shouldStartANCS = false;
+            if (pANCSClient == nullptr) {
+                pANCSClient = NimBLEDevice::createClient();
+            }
+
+            if (!pANCSClient->isConnected()) {
+                if (pANCSClient->connect(connectedPeerAddress)) {
+                    Serial.println("ANCS Client Connected to peer.");
+                    
+                    NimBLERemoteService* pANCSService = pANCSClient->getService(NimBLEUUID(ANCS_SERVICE_UUID));
+                    if (pANCSService != nullptr) {
+                        pControlPoint = pANCSService->getCharacteristic(NimBLEUUID(ANCS_CTRL_PT_UUID));
+                        pDataSource = pANCSService->getCharacteristic(NimBLEUUID(ANCS_DATA_SRC_UUID));
+                        NimBLERemoteCharacteristic* pNotifSource = pANCSService->getCharacteristic(NimBLEUUID(ANCS_NOTIF_SRC_UUID));
+
+                        if (pDataSource && pDataSource->canNotify()) {
+                            pDataSource->subscribe(true, notifyCB);
+                            Serial.println("ANCS Data Source Subscribed");
+                        }
+                        if (pNotifSource && pNotifSource->canNotify()) {
+                            pNotifSource->subscribe(true, notifyCB);
+                            Serial.println("ANCS Notification Source Subscribed");
+                        }
+                    } else {
+                        Serial.println("ANCS Service not found on peer.");
+                    }
+                } else {
+                    Serial.println("ANCS Client failed to connect.");
+                }
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }

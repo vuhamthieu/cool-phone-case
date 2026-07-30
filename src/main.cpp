@@ -18,6 +18,15 @@ volatile bool modeChangedFlag = false;
 volatile bool touchTriggeredFlag = false;
 bool timeSynced = false;
 
+// Settings Flags
+bool notificationsEnabled = true;
+bool mediaControlEnabled = true;
+
+// Notification State
+volatile bool hasNewNotification = false;
+char notificationApp[32] = {0};
+char notificationSender[64] = {0};
+
 
 // Battery & Multitasking States
 volatile bool isLowBattery = false;
@@ -110,6 +119,8 @@ void Task_General(void* pvParameters) {
     unsigned long lastBlinkToggle = 0;
     bool blinkState = false;
     
+    unsigned long notificationStartTime = 0;
+    
     // Animation timing for Mochi
     unsigned long lastMochiFrameTime = 0;
     uint8_t mochiFrameIndex = 0;
@@ -181,8 +192,22 @@ void Task_General(void* pvParameters) {
             }
             vTaskDelay(pdMS_TO_TICKS(100)); // Refresh warning screen at 10Hz
         } else {
-            switch (currentMode) {
-                case MODE_CLOCK:
+            if (hasNewNotification) {
+                notificationStartTime = millis();
+                hasNewNotification = false;
+            }
+
+            if (notificationStartTime > 0 && (millis() - notificationStartTime < 5000)) {
+                if (xSemaphoreTake(displayMutex, portMAX_DELAY) == pdTRUE) {
+                    displayClear();
+                    renderNotification(notificationApp, notificationSender);
+                    displayUpdate();
+                    xSemaphoreGive(displayMutex);
+                }
+                vTaskDelay(pdMS_TO_TICKS(100)); // Refresh at 10Hz
+            } else {
+                switch (currentMode) {
+                    case MODE_CLOCK:
                     if (xSemaphoreTake(displayMutex, portMAX_DELAY) == pdTRUE) {
                         displayClear();
                         renderClock(currentClockStyle);
@@ -224,8 +249,8 @@ void Task_General(void* pvParameters) {
                     vTaskDelay(pdMS_TO_TICKS(30)); // 30Hz frame render rate
                     break;
                 }
-
-            }
-        }
-    }
-}
+                } // closes switch
+            } // closes else
+        } // closes else
+    } // closes for
+} // closes Task_General
