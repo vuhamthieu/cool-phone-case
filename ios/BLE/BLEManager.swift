@@ -73,17 +73,22 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     }
 
     func syncTime() {
-        guard let peripheral = activePeripheral, let char = timeCharacteristic else {
-            print("BLE Warning: Device not connected or time characteristic missing")
+        guard let peripheral = activePeripheral else {
+            print("BLE syncTime: no active peripheral — not connected")
             return
         }
-        let epoch = UInt32(Date().timeIntervalSince1970)
+        guard let char = timeCharacteristic else {
+            print("BLE syncTime: timeCharacteristic is nil — service may not have been discovered yet")
+            return
+        }
+        let timestamp = UInt32(Date().timeIntervalSince1970)
+        print("BLE syncTime: Syncing time: \(timestamp) to peripheral \(peripheral.name ?? "?")")
         var payload = Data(count: 4)
         payload.withUnsafeMutableBytes { ptr in
-            ptr.storeBytes(of: epoch.littleEndian, toByteOffset: 0, as: UInt32.self)
+            ptr.storeBytes(of: timestamp.littleEndian, toByteOffset: 0, as: UInt32.self)
         }
         peripheral.writeValue(payload, for: char, type: .withResponse)
-        print("Sent Unix timestamp to ESP32: \(epoch)")
+        print("BLE syncTime: Write issued — 4 bytes: \(payload.map { String(format: "%02X", $0) }.joined(separator: " "))")
     }
 
     /// Pack HealthKit metrics into an 8-byte little-endian frame and write to the ESP32.

@@ -85,20 +85,28 @@ struct HomeView: View {
                 .padding(.top, 24) // Removed massive top padding (Safe Area handles top naturally)
                 .padding(.bottom, 12)
 
-                // ── Status (Scale: 7 -> 10) ──────────────────────────────────
+                // ── Status ──────────────────────────────────────────────────
                 PixelText(
                     bleManager.isConnected
                         ? "Your case is connected."
                         : "Your case isn't connected to your phone.",
-                    size: 10,
+                    size: 9,
                     color: glyphTextMuted
                 )
                 .multilineTextAlignment(.center)
+                .lineLimit(2)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 16)
-                .padding(.bottom, 28)
+                .padding(.bottom, 12)
 
-                // ── Connect / Disconnect button (Scale: 8 -> 12) ─────────────
+                // ── Battery Level (visible when connected) ────────────────────
+                if bleManager.isConnected {
+                    PixelText("CASE BATTERY: \(bleManager.batteryLevel)%", size: 8, color: glyphTextMuted)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.bottom, 16)
+                }
+
+                // ── Connect / Disconnect button ──────────────────────────────
                 Button {
                     bleManager.isConnected ? bleManager.disconnect() : bleManager.startScanning()
                 } label: {
@@ -107,7 +115,7 @@ struct HomeView: View {
                             .stroke(glyphTextActive, lineWidth: 2)
                             .background(bleManager.isConnected ? Circle().fill(glyphAccent) : nil)
                             .frame(width: 14, height: 14)
-                        
+
                         PixelText(
                             bleManager.isConnected ? "DISCONNECT" : "CONNECT",
                             size: 12,
@@ -529,8 +537,6 @@ struct FacesView: View {
                                 ActivityRow(icon: "heart.fill", assetName: "icon_heartrate", label: "HEART RATE", value: "\(healthKit.heartRate)", unit: "BPM", accent: glyphAccent)
                                 Divider().background(Color.white.opacity(0.05))
                                 ActivityRow(icon: "flame.fill", assetName: "icon_calories", label: "CALORIES", value: "\(healthKit.activeCalories)", unit: "KCAL", accent: glyphAccent)
-                                Divider().background(Color.white.opacity(0.05))
-                                ActivityRow(icon: "battery.100", assetName: "icon_battery", label: "BATTERY", value: "\(bleManager.batteryLevel)%", unit: "CASE", accent: glyphTextActive)
                             }
                             .background(glyphBg)
                             .cornerRadius(8)
@@ -995,8 +1001,6 @@ struct PixelText: View {
         Text(text)
             .font(pFont(size))
             .foregroundColor(color)
-            .lineLimit(1)
-            .minimumScaleFactor(0.4)
     }
 }
 
