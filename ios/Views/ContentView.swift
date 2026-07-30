@@ -127,16 +127,6 @@ struct HomeView: View {
                 .padding(.horizontal, 48)
                 .padding(.bottom, 36)
 
-                // ── Search row ────────────────────────────────────────────────
-                HStack {
-                    Spacer()
-                    Image(systemName: "magnifyingglass")
-                        .foregroundColor(glyphTextActive)
-                        .font(.system(size: 28, weight: .bold)) // Enlarged search icon
-                }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 16)
-
                 // ── Section Title: WIDGETS (Scale: 6 -> 9)
                 PixelText("WIDGETS", size: 9, color: glyphTextMuted)
                     .padding(.horizontal, 20)
@@ -621,13 +611,13 @@ struct ActivityRow: View {
                     .resizable()
                     .scaledToFit()
                     .foregroundColor(accent)
-                    .frame(width: 28, height: 28) // Enlarged custom icon
-                    .frame(width: 36)
+                    .frame(width: 40, height: 40) // Enlarged custom icon to 40x40
+                    .frame(width: 44)
             } else {
                 Image(systemName: icon)
-                    .font(.system(size: 24, weight: .black)) // Enlarged SF Symbol
+                    .font(.system(size: 28, weight: .black)) // Enlarged SF Symbol to at least 24
                     .foregroundColor(accent)
-                    .frame(width: 36)
+                    .frame(width: 44)
             }
 
             PixelText(label, size: 8, color: glyphTextMuted) // 5 -> 8
@@ -1005,6 +995,8 @@ struct PixelText: View {
         Text(text)
             .font(pFont(size))
             .foregroundColor(color)
+            .lineLimit(1)
+            .minimumScaleFactor(0.4)
     }
 }
 
@@ -1086,28 +1078,28 @@ struct CustomIconContainer: View {
         ZStack {
             Circle()
                 .fill(Color(white: 0.12))
-                .frame(width: 56, height: 56) // Increased from 38 to 56
+                .frame(width: 64, height: 64) // Increased from 56 to 64
             
             if let uiImage = UIImage(named: name) {
                 Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 32, height: 32) // Increased from 22 to 32
+                    .frame(width: 40, height: 40) // Increased to at least 40x40
             } else {
                 // Fallback to vector/SF Symbol
                 if fallbackIsBag {
                     ZStack {
                         Image(systemName: "bag.fill")
-                            .font(.system(size: 24)) // Increased from 16 to 24
+                            .font(.system(size: 28)) // Increased to at least 24
                             .foregroundColor(glyphTextMuted)
                         Image(systemName: "bag")
-                            .font(.system(size: 24))
+                            .font(.system(size: 28))
                             .foregroundColor(fallbackAccentColor)
                     }
                 } else {
                     ZStack {
                         Image(systemName: fallbackSymbol)
-                            .font(.system(size: 24)) // Increased from 16 to 24
+                            .font(.system(size: 28)) // Increased to at least 24
                             .foregroundColor(glyphTextMuted)
                         
                         if fallbackAccentBottom {
@@ -1115,19 +1107,19 @@ struct CustomIconContainer: View {
                                 Spacer()
                                 Rectangle()
                                     .fill(fallbackAccentColor)
-                                    .frame(width: 8, height: 4) // Doubled size
-                                    .padding(.bottom, 16)
+                                    .frame(width: 10, height: 5)
+                                    .padding(.bottom, 18)
                             }
                         } else {
                             Circle()
                                 .fill(fallbackAccentColor)
-                                .frame(width: 7, height: 7) // Doubled size
+                                .frame(width: 9, height: 9)
                         }
                     }
                 }
             }
         }
-        .frame(width: 56, height: 56)
+        .frame(width: 64, height: 64)
     }
 }
 
