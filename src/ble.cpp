@@ -56,7 +56,7 @@ class TimeCallback: public NimBLECharacteristicCallbacks {
 
         uint32_t timestamp = 0;
         if (rxValue.length() == 4) {
-            // iOS sends 4-byte little-endian UInt32
+            // iOS sends 4-byte little-endian UInt32 (local Unix time, already offset)
             memcpy(&timestamp, rxValue.data(), 4);
         } else if (rxValue.length() > 0) {
             // Fallback: plain ASCII decimal string
@@ -65,11 +65,11 @@ class TimeCallback: public NimBLECharacteristicCallbacks {
 
         if (timestamp > 0) {
             struct timeval tv;
-            tv.tv_sec  = (time_t)timestamp;
+            tv.tv_sec  = (time_t)timestamp;   // Already local time from iOS
             tv.tv_usec = 0;
             settimeofday(&tv, NULL);
             timeSynced = true;
-            Serial.printf("RTC synced to Unix timestamp: %u\n", timestamp);
+            Serial.printf("RTC synced. Local time set to Unix: %u\n", timestamp);
         } else {
             Serial.println("TimeCallback: invalid timestamp, RTC not updated");
         }

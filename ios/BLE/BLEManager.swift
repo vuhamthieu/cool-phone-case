@@ -81,14 +81,22 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
             print("BLE syncTime: timeCharacteristic is nil — service may not have been discovered yet")
             return
         }
-        let timestamp = UInt32(Date().timeIntervalSince1970)
-        print("BLE syncTime: Syncing time: \(timestamp) to peripheral \(peripheral.name ?? "?")")
+
+        // The ESP32 has no POSIX TZ database — it calls gmtime() directly on whatever
+        // timestamp we store via settimeofday(). So we send LOCAL time (UTC + offset)
+        // instead of raw UTC, which makes gmtime() return the correct wall-clock time.
+        let utcNow = Date().timeIntervalSince1970
+        let tzOffset = TimeZone.current.secondsFromGMT()
+        let localTimestamp = UInt32(utcNow) + UInt32(tzOffset)
+
+        print("BLE syncTime: UTC=\(UInt32(utcNow))  TZ offset=\(tzOffset)s  Sending local=\(localTimestamp)")
+
         var payload = Data(count: 4)
         payload.withUnsafeMutableBytes { ptr in
-            ptr.storeBytes(of: timestamp.littleEndian, toByteOffset: 0, as: UInt32.self)
+            ptr.storeBytes(of: localTimestamp.littleEndian, toByteOffset: 0, as: UInt32.self)
         }
         peripheral.writeValue(payload, for: char, type: .withResponse)
-        print("BLE syncTime: Write issued — 4 bytes: \(payload.map { String(format: "%02X", $0) }.joined(separator: " "))")
+        print("BLE syncTime: wrote 4 bytes: \(payload.map { String(format: "%02X", $0) }.joined(separator: " "))")
     }
 
     /// Pack HealthKit metrics into an 8-byte little-endian frame and write to the ESP32.
