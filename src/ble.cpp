@@ -3,9 +3,10 @@
 #include "config.h"
 #include "display.h"
 #include <NimBLEDevice.h>
+#include "nimble/nimble/host/include/host/ble_hs.h"
 #include <sys/time.h>
 
-static bool isConnected = false;
+static volatile bool isConnected = false;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Server connection callbacks
@@ -15,7 +16,16 @@ static bool isConnected = false;
 // ─────────────────────────────────────────────────────────────────────────────
 void ancsTask(void *pvParameters);
 static NimBLEAddress connectedPeerAddress;
-static bool shouldStartANCS = false;
+static volatile uint16_t activeConnHandle = 0xFFFF;
+static volatile bool shouldStartANCS = false;
+
+struct NimBLEClientHack {
+    void* vtable;
+    NimBLEAddress m_peerAddress;
+    int m_lastErr;
+    uint16_t m_conn_id;
+    bool m_connEstablished;
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Server connection callbacks
@@ -23,13 +33,13 @@ static bool shouldStartANCS = false;
 class ServerCallbacks: public NimBLEServerCallbacks {
     void onConnect(NimBLEServer* pServer, ble_gap_conn_desc* desc) override {
         isConnected = true;
+        activeConnHandle = desc->conn_handle;
         connectedPeerAddress = NimBLEAddress(desc->peer_ota_addr);
-        Serial.printf("iOS App Connected via BLE: %s\n", connectedPeerAddress.toString().c_str());
+        Serial.printf("iOS App Connected via BLE: %s (conn_handle=%d)\n", connectedPeerAddress.toString().c_str(), activeConnHandle);
         
-        // If already bonded, start ANCS client
-        if (pServer->getPeerInfo(desc->conn_handle).isBonded()) {
-            Serial.println("Device is already bonded, queuing ANCS start.");
-            shouldStartANCS = true;
+        // If already bonded in database, wait for iOS to secure the link
+        if (NimBLEDevice::isBonded(connectedPeerAddress)) {
+            Serial.println("Device is already bonded in NVS database. Waiting for iOS to auto-encrypt...");
         } else {
             Serial.println("Not bonded — forcing pairing now.");
             NimBLEDevice::startSecurity(desc->conn_handle);
@@ -39,12 +49,14 @@ class ServerCallbacks: public NimBLEServerCallbacks {
     void onDisconnect(NimBLEServer* pServer, ble_gap_conn_desc* desc) override {
         isConnected = false;
         shouldStartANCS = false;
+        activeConnHandle = 0xFFFF;
         Serial.println("iOS App Disconnected");
         NimBLEDevice::getAdvertising()->start();
     }
 
     void onAuthenticationComplete(ble_gap_conn_desc* desc) override {
         if (!isConnected) return;
+        activeConnHandle = desc->conn_handle;
         if (desc->sec_state.encrypted) {
             Serial.println("BLE Authentication Complete & Encrypted! Queuing ANCS start.");
             shouldStartANCS = true;
@@ -58,16 +70,7 @@ class ServerCallbacks: public NimBLEServerCallbacks {
 // Instant Redraw Helper
 // ─────────────────────────────────────────────────────────────────────────────
 static void triggerDisplayRefresh() {
-    if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-        displayClear();
-        if (currentMode == MODE_CLOCK) {
-            renderClock(currentClockStyle);
-        } else if (currentMode == MODE_MOCHI) {
-            renderMochi(currentMochiEmotion, 0);
-        }
-        displayUpdate();
-        xSemaphoreGive(displayMutex);
-    }
+    modeChangedFlag = true;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -76,6 +79,7 @@ static void triggerDisplayRefresh() {
 class ModeCallback: public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic *pCharacteristic) override {
         std::string value = pCharacteristic->getValue();
+        Serial.printf("[MODE] onWrite fired! len=%d\n", (int)value.length());
         if (value.length() > 0) {
             uint8_t modeVal = (uint8_t)value[0];
             Serial.printf("[MODE] Successfully parsed byte: %d\n", modeVal);
@@ -93,6 +97,9 @@ class ModeCallback: public NimBLECharacteristicCallbacks {
                 Serial.printf("[MODE] Invalid mode value received: %d\n", modeVal);
             }
         }
+    }
+    void onWrite(NimBLECharacteristic *pCharacteristic, ble_gap_conn_desc* desc) override {
+        onWrite(pCharacteristic);
     }
     void onRead(NimBLECharacteristic *pCharacteristic) override {
         Serial.println("[MODE] onRead fired");
@@ -126,11 +133,15 @@ class TimeCallback: public NimBLECharacteristicCallbacks {
             Serial.println("[TIME] Invalid timestamp");
         }
     }
+    void onWrite(NimBLECharacteristic *pCharacteristic, ble_gap_conn_desc* desc) override {
+        onWrite(pCharacteristic);
+    }
 };
 
 class ClockStyleCallback: public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic *pCharacteristic) override {
         std::string value = pCharacteristic->getValue();
+        Serial.printf("[CLOCK_STYLE] onWrite fired! len=%d\n", (int)value.length());
         if (value.length() > 0) {
             uint8_t styleVal = (uint8_t)value[0];
             Serial.printf("[CLOCK_STYLE] Successfully parsed byte: %d\n", styleVal);
@@ -142,17 +153,60 @@ class ClockStyleCallback: public NimBLECharacteristicCallbacks {
             }
         }
     }
+    void onWrite(NimBLECharacteristic *pCharacteristic, ble_gap_conn_desc* desc) override {
+        onWrite(pCharacteristic);
+    }
 };
 
 class SettingsCallback: public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic *pCharacteristic) override {
         std::string value = pCharacteristic->getValue();
+        Serial.printf("[SETTINGS] onWrite fired! len=%d\n", (int)value.length());
         if (value.length() > 0) {
             uint8_t flags = (uint8_t)value[0];
             notificationsEnabled = (flags & 0x01) != 0;
             mediaControlEnabled = (flags & 0x02) != 0;
             Serial.printf("[SETTINGS] Successfully parsed byte: %d (Notifications=%d, Media=%d)\n", flags, notificationsEnabled, mediaControlEnabled);
         }
+    }
+    void onWrite(NimBLECharacteristic *pCharacteristic, ble_gap_conn_desc* desc) override {
+        onWrite(pCharacteristic);
+    }
+};
+
+class MySecurityCallbacks : public NimBLESecurityCallbacks {
+    uint32_t onPassKeyRequest() override {
+        Serial.println("[SECURITY] onPassKeyRequest (returning 123456)");
+        return 123456;
+    }
+    void onPassKeyNotify(uint32_t pass_key) override {
+        Serial.printf("[SECURITY] onPassKeyNotify: PIN is %06u\n", pass_key);
+        if (displayMutex != NULL && xSemaphoreTake(displayMutex, pdMS_TO_TICKS(150)) == pdTRUE) {
+            displayClear();
+            char buf[32];
+            snprintf(buf, sizeof(buf), "PIN: %06u", pass_key);
+            drawTextCentered(25, "PAIRING REQUEST");
+            drawTextCentered(40, buf);
+            displayUpdate();
+            xSemaphoreGive(displayMutex);
+        }
+    }
+    bool onSecurityRequest() override {
+        Serial.println("[SECURITY] onSecurityRequest (accepting)");
+        return true;
+    }
+    void onAuthenticationComplete(ble_gap_conn_desc* desc) override {
+        Serial.printf("[SECURITY] onAuthenticationComplete: status=%d, encrypted=%d, bonded=%d\n",
+                      desc->sec_state.encrypted ? 0 : 1,
+                      desc->sec_state.encrypted,
+                      desc->sec_state.bonded);
+        if (desc->sec_state.encrypted) {
+            shouldStartANCS = true;
+        }
+    }
+    bool onConfirmPIN(uint32_t pin) override {
+        Serial.printf("[SECURITY] onConfirmPIN: %06u\n", pin);
+        return true;
     }
 };
 
@@ -165,9 +219,11 @@ void bleInit() {
     NimBLEDevice::init("OverByte");
 
     NimBLEDevice::setSecurityAuth(true, true, true);
-    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
+    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY); // Display PIN on OLED for secure pairing
+    NimBLEDevice::setSecurityPasskey(123456); 
     NimBLEDevice::setSecurityInitKey(BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID);
     NimBLEDevice::setSecurityRespKey(BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID);
+    NimBLEDevice::setSecurityCallbacks(new MySecurityCallbacks());
 
     NimBLEServer *pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(new ServerCallbacks());
@@ -177,28 +233,28 @@ void bleInit() {
     // Mode characteristic
     NimBLECharacteristic *pModeChar = pService->createCharacteristic(
         CHARACTERISTIC_MODE_UUID,
-        NIMBLE_PROPERTY::WRITE_ENC | NIMBLE_PROPERTY::READ_ENC
+        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::WRITE_AUTHEN
     );
     pModeChar->setCallbacks(new ModeCallback());
 
     // Time-sync characteristic
     NimBLECharacteristic *pTimeChar = pService->createCharacteristic(
         CHARACTERISTIC_TIME_UUID,
-        NIMBLE_PROPERTY::WRITE_ENC
+        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::WRITE_AUTHEN
     );
     pTimeChar->setCallbacks(new TimeCallback());
 
     // Clock style characteristic
     NimBLECharacteristic *pClockStyleChar = pService->createCharacteristic(
         CHARACTERISTIC_CLOCK_STYLE_UUID,
-        NIMBLE_PROPERTY::WRITE_ENC
+        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::WRITE_AUTHEN
     );
     pClockStyleChar->setCallbacks(new ClockStyleCallback());
 
     // Settings characteristic
     NimBLECharacteristic *pSettingsChar = pService->createCharacteristic(
         CHARACTERISTIC_SETTINGS_UUID,
-        NIMBLE_PROPERTY::WRITE_ENC
+        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::WRITE_AUTHEN
     );
     pSettingsChar->setCallbacks(new SettingsCallback());
 
@@ -215,9 +271,31 @@ void bleInit() {
     pBatteryService->start();
 
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
-    pAdvertising->addServiceUUID(CONTROL_SERVICE_UUID);
+    pAdvertising->setAppearance(0x00C0); // Generic Watch / Companion Display (0x00C0 = 192)
+
+    // Apple ANCS Specification: AD Type 0x15 (128-bit Service Solicitation)
+    // Payload: Length=17 (0x11), Type=0x15, ANCS UUID (16 bytes LSB)
+    const char solData[] = {
+        0x11, // Length (17 bytes: 1 byte type + 16 bytes UUID)
+        0x15, // AD Type 0x15: 128-bit Service Solicitation
+        (char)0xd0, (char)0x00, (char)0x2d, (char)0x12, 
+        (char)0x1e, (char)0x4b, (char)0x0f, (char)0xa4, 
+        (char)0x99, (char)0x4e, (char)0xce, (char)0xb5, 
+        (char)0x31, (char)0xf4, (char)0x05, (char)0x79
+    };
+
+    NimBLEAdvertisementData advData;
+    advData.setFlags(0x06); // General Discoverable + BR/EDR Not Supported (Mandatory for iOS)
+    advData.setName("OverByte");
+    advData.addData((char*)solData, sizeof(solData));
+    pAdvertising->setAdvertisementData(advData);
+
+    // Scan Response Data (Control Service UUID for iOS Swift app discovery)
+    NimBLEAdvertisementData scanData;
+    scanData.setCompleteServices(NimBLEUUID(CONTROL_SERVICE_UUID));
+    pAdvertising->setScanResponseData(scanData);
+
     pAdvertising->setScanResponse(true);
-    pAdvertising->setName("OverByte");
     pAdvertising->setMinPreferred(0x06);
     pAdvertising->setMaxPreferred(0x12);
     NimBLEDevice::startAdvertising();
@@ -327,35 +405,45 @@ static void notifyCB(NimBLERemoteCharacteristic* pRemoteCharacteristic, uint8_t*
 
 void ancsTask(void *pvParameters) {
     while (true) {
-        if (shouldStartANCS && isConnected) {
+        if (shouldStartANCS && isConnected && activeConnHandle != 0xFFFF) {
+            ble_gap_conn_desc desc;
+            if (ble_gap_conn_find(activeConnHandle, &desc) == 0) {
+                if (!desc.sec_state.encrypted) {
+                    Serial.println("ANCS: Connection not encrypted yet. Waiting for encryption/bonding...");
+                    vTaskDelay(pdMS_TO_TICKS(500));
+                    continue; // Check again in next loop
+                }
+            }
+
             shouldStartANCS = false;
+            vTaskDelay(pdMS_TO_TICKS(500)); // Short delay after encryption to settle
+
             if (pANCSClient == nullptr) {
                 pANCSClient = NimBLEDevice::createClient();
             }
 
-            if (!pANCSClient->isConnected()) {
-                if (pANCSClient->connect(connectedPeerAddress)) {
-                    Serial.println("ANCS Client Connected to peer.");
-                    
-                    NimBLERemoteService* pANCSService = pANCSClient->getService(NimBLEUUID(ANCS_SERVICE_UUID));
-                    if (pANCSService != nullptr) {
-                        pControlPoint = pANCSService->getCharacteristic(NimBLEUUID(ANCS_CTRL_PT_UUID));
-                        pDataSource = pANCSService->getCharacteristic(NimBLEUUID(ANCS_DATA_SRC_UUID));
-                        NimBLERemoteCharacteristic* pNotifSource = pANCSService->getCharacteristic(NimBLEUUID(ANCS_NOTIF_SRC_UUID));
+            if (pANCSClient != nullptr) {
+                NimBLEClientHack* pHack = (NimBLEClientHack*)pANCSClient;
+                pHack->m_conn_id = activeConnHandle;
+                pHack->m_connEstablished = true;
 
-                        if (pDataSource && pDataSource->canNotify()) {
-                            pDataSource->subscribe(true, notifyCB);
-                            Serial.println("ANCS Data Source Subscribed");
-                        }
-                        if (pNotifSource && pNotifSource->canNotify()) {
-                            pNotifSource->subscribe(true, notifyCB);
-                            Serial.println("ANCS Notification Source Subscribed");
-                        }
-                    } else {
-                        Serial.println("ANCS Service not found on peer.");
+                Serial.printf("ANCS: Querying ANCS GATT Service on active conn_handle %d...\n", activeConnHandle);
+                NimBLERemoteService* pANCSService = pANCSClient->getService(NimBLEUUID(ANCS_SERVICE_UUID));
+                if (pANCSService != nullptr) {
+                    pControlPoint = pANCSService->getCharacteristic(NimBLEUUID(ANCS_CTRL_PT_UUID));
+                    pDataSource = pANCSService->getCharacteristic(NimBLEUUID(ANCS_DATA_SRC_UUID));
+                    NimBLERemoteCharacteristic* pNotifSource = pANCSService->getCharacteristic(NimBLEUUID(ANCS_NOTIF_SRC_UUID));
+
+                    if (pDataSource && pDataSource->canNotify()) {
+                        pDataSource->subscribe(true, notifyCB);
+                        Serial.println("ANCS Data Source Subscribed!");
+                    }
+                    if (pNotifSource && pNotifSource->canNotify()) {
+                        pNotifSource->subscribe(true, notifyCB);
+                        Serial.println("ANCS Notification Source Subscribed!");
                     }
                 } else {
-                    Serial.println("ANCS Client failed to connect.");
+                    Serial.println("ANCS Service not exposed by peer. (Enable 'Share System Notifications' in iOS Bluetooth settings)");
                 }
             }
         }

@@ -55,7 +55,11 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         self.activePeripheral = peripheral
         peripheral.delegate = self
         connectionStatusText = "Connecting..."
-        centralManager.connect(peripheral, options: nil)
+        
+        let options: [String: Any] = [
+            CBConnectPeripheralOptionRequiresANCS: true
+        ]
+        centralManager.connect(peripheral, options: options)
     }
 
     func disconnect() {
