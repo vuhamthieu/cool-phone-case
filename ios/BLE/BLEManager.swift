@@ -144,12 +144,12 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         isConnected = false
-        modeCharacteristic     = nil
-        timeCharacteristic     = nil
-        activityCharacteristic = nil
-        batteryCharacteristic  = nil
-        activePeripheral       = nil
-        connectionStatusText   = "Disconnected"
+        modeCharacteristic       = nil
+        timeCharacteristic       = nil
+        clockStyleCharacteristic = nil
+        batteryCharacteristic    = nil
+        activePeripheral         = nil
+        connectionStatusText     = "Disconnected"
         startScanning()
     }
 
