@@ -69,22 +69,9 @@ void renderClock(ClockStyle style) {
     
     switch (style) {
         case CLOCK_BIG_DIGITAL:
-            // Large font digits: e.g. u8g2_font_logisoso28_tn
             u8g2.setFont(u8g2_font_logisoso28_tn);
             snprintf(timeStr, sizeof(timeStr), "%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
             drawTextCentered(42, timeStr);
-            
-            // Draw small seconds below the clock
-            u8g2.setFont(u8g2_font_6x10_tf);
-            snprintf(timeStr, sizeof(timeStr), ":%02d", timeinfo.tm_sec);
-            u8g2.drawStr(100, 52, timeStr);
-            
-            // Connection icon indicator
-            if (timeSynced) {
-                u8g2.drawStr(5, 58, "BLE OK");
-            } else {
-                u8g2.drawStr(5, 58, "NO SYNC");
-            }
             break;
             
         case CLOCK_DIGITAL_DATE:
