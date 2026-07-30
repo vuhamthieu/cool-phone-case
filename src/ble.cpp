@@ -41,8 +41,12 @@ class ServerCallbacks: public NimBLEServerCallbacks {
 
     void onAuthenticationComplete(ble_gap_conn_desc* desc) override {
         if (!isConnected) return;
-        Serial.println("BLE Authentication Complete! Queuing ANCS start.");
-        shouldStartANCS = true;
+        if (desc->sec_state.encrypted) {
+            Serial.println("BLE Authentication Complete & Encrypted! Queuing ANCS start.");
+            shouldStartANCS = true;
+        } else {
+            Serial.println("BLE Authentication Failed!");
+        }
     }
 };
 
@@ -272,9 +276,15 @@ static void notifyCB(NimBLERemoteCharacteristic* pRemoteCharacteristic, uint8_t*
                     
                     // User Request: Use strrchr to slice the bundle ID
                     char* lastDot = strrchr(bundleID, '.');
-                    if (lastDot != nullptr && *(lastDot + 1) != '\0') {
-                        strncpy((char*)notificationApp, lastDot + 1, sizeof(notificationApp) - 1);
+                    if (lastDot != nullptr) {
+                        if (*(lastDot + 1) != '\0') {
+                            strncpy((char*)notificationApp, lastDot + 1, sizeof(notificationApp) - 1);
+                        } else {
+                            // Dot is at the very end? Fallback to full
+                            strncpy((char*)notificationApp, bundleID, sizeof(notificationApp) - 1);
+                        }
                     } else {
+                        // No dot found, fallback to full string
                         strncpy((char*)notificationApp, bundleID, sizeof(notificationApp) - 1);
                     }
                     hasData = true;

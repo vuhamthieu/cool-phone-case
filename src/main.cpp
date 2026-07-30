@@ -206,6 +206,7 @@ void Task_General(void* pvParameters) {
                 }
                 vTaskDelay(pdMS_TO_TICKS(100)); // Refresh at 10Hz
             } else {
+                notificationStartTime = 0; // MUST reset the timer
                 switch (currentMode) {
                     case MODE_CLOCK:
                     if (xSemaphoreTake(displayMutex, portMAX_DELAY) == pdTRUE) {
