@@ -50,6 +50,7 @@ enum MochiEmotion {
 extern volatile SystemMode currentMode;
 extern volatile ClockStyle currentClockStyle;
 extern volatile MochiEmotion currentMochiEmotion;
+extern volatile MochiEmotion appSelectedMochiEmotion;
 extern volatile bool modeChangedFlag;
 extern volatile bool touchTriggeredFlag;
 extern bool timeSynced;

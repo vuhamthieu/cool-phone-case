@@ -1,6 +1,7 @@
 // src/ble.cpp
 #include "ble.h"
 #include "config.h"
+#include "display.h"
 #include <NimBLEDevice.h>
 #include <sys/time.h>
 
@@ -54,23 +55,42 @@ class ServerCallbacks: public NimBLEServerCallbacks {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Mode characteristic: 1-byte mode index  [0=CLOCK | 1=MOCHI | 2=ACTIVITY]
+// Instant Redraw Helper
+// ─────────────────────────────────────────────────────────────────────────────
+static void triggerDisplayRefresh() {
+    if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        displayClear();
+        if (currentMode == MODE_CLOCK) {
+            renderClock(currentClockStyle);
+        } else if (currentMode == MODE_MOCHI) {
+            renderMochi(currentMochiEmotion, 0);
+        }
+        displayUpdate();
+        xSemaphoreGive(displayMutex);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mode characteristic: 1-byte mode index  [0=CLOCK | 1..5=MOCHI emotes]
 // ─────────────────────────────────────────────────────────────────────────────
 class ModeCallback: public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic *pCharacteristic) override {
-        std::string rxValue = pCharacteristic->getValue();
-        Serial.printf("[MODE] onWrite fired! len=%d\n", (int)rxValue.length());
-        for (size_t i = 0; i < rxValue.length(); i++) {
-            Serial.printf("[MODE]   byte[%d] = 0x%02X\n", (int)i, (uint8_t)rxValue[i]);
-        }
-        if (rxValue.length() > 0) {
-            uint8_t modeVal = rxValue[0];
-            if (modeVal <= 1) {
-                currentMode = (SystemMode)modeVal;
+        std::string value = pCharacteristic->getValue();
+        if (value.length() > 0) {
+            uint8_t modeVal = (uint8_t)value[0];
+            Serial.printf("[MODE] Successfully parsed byte: %d\n", modeVal);
+            if (modeVal == 0) {
+                currentMode = MODE_CLOCK;
                 modeChangedFlag = true;
-                Serial.printf("[MODE] Set currentMode = %d\n", (int)currentMode);
+                triggerDisplayRefresh();
+            } else if (modeVal >= 1 && modeVal <= 5) {
+                currentMode = MODE_MOCHI;
+                appSelectedMochiEmotion = (MochiEmotion)(modeVal - 1);
+                currentMochiEmotion = appSelectedMochiEmotion;
+                modeChangedFlag = true;
+                triggerDisplayRefresh();
             } else {
-                Serial.printf("[MODE] Invalid value: %d\n", modeVal);
+                Serial.printf("[MODE] Invalid mode value received: %d\n", modeVal);
             }
         }
     }
@@ -101,6 +121,7 @@ class TimeCallback: public NimBLECharacteristicCallbacks {
             settimeofday(&tv, NULL);
             timeSynced = true;
             Serial.printf("[TIME] RTC synced to Unix: %u\n", timestamp);
+            triggerDisplayRefresh();
         } else {
             Serial.println("[TIME] Invalid timestamp");
         }
@@ -109,18 +130,15 @@ class TimeCallback: public NimBLECharacteristicCallbacks {
 
 class ClockStyleCallback: public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic *pCharacteristic) override {
-        std::string rxValue = pCharacteristic->getValue();
-        Serial.printf("[CLOCK_STYLE] onWrite fired! len=%d\n", (int)rxValue.length());
-        for (size_t i = 0; i < rxValue.length(); i++) {
-            Serial.printf("[CLOCK_STYLE]   byte[%d] = 0x%02X\n", (int)i, (uint8_t)rxValue[i]);
-        }
-        if (rxValue.length() > 0) {
-            uint8_t styleVal = rxValue[0];
+        std::string value = pCharacteristic->getValue();
+        if (value.length() > 0) {
+            uint8_t styleVal = (uint8_t)value[0];
+            Serial.printf("[CLOCK_STYLE] Successfully parsed byte: %d\n", styleVal);
             if (styleVal < CLOCK_STYLE_MAX) {
                 currentClockStyle = (ClockStyle)styleVal;
-                Serial.printf("[CLOCK_STYLE] Set currentClockStyle = %d\n", (int)currentClockStyle);
+                triggerDisplayRefresh();
             } else {
-                Serial.printf("[CLOCK_STYLE] Invalid value: %d\n", styleVal);
+                Serial.printf("[CLOCK_STYLE] Invalid style value received: %d\n", styleVal);
             }
         }
     }
@@ -128,16 +146,12 @@ class ClockStyleCallback: public NimBLECharacteristicCallbacks {
 
 class SettingsCallback: public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic *pCharacteristic) override {
-        std::string rxValue = pCharacteristic->getValue();
-        Serial.printf("[SETTINGS] onWrite fired! len=%d\n", (int)rxValue.length());
-        for (size_t i = 0; i < rxValue.length(); i++) {
-            Serial.printf("[SETTINGS]   byte[%d] = 0x%02X\n", (int)i, (uint8_t)rxValue[i]);
-        }
-        if (rxValue.length() > 0) {
-            uint8_t flags = rxValue[0];
+        std::string value = pCharacteristic->getValue();
+        if (value.length() > 0) {
+            uint8_t flags = (uint8_t)value[0];
             notificationsEnabled = (flags & 0x01) != 0;
             mediaControlEnabled = (flags & 0x02) != 0;
-            Serial.printf("[SETTINGS] Notifications=%d, Media=%d\n", notificationsEnabled, mediaControlEnabled);
+            Serial.printf("[SETTINGS] Successfully parsed byte: %d (Notifications=%d, Media=%d)\n", flags, notificationsEnabled, mediaControlEnabled);
         }
     }
 };

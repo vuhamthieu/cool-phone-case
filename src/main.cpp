@@ -13,6 +13,7 @@
 volatile SystemMode currentMode = MODE_CLOCK;
 volatile ClockStyle currentClockStyle = CLOCK_BIG_DIGITAL;
 volatile MochiEmotion currentMochiEmotion = MOCHI_DEFAULT;
+volatile MochiEmotion appSelectedMochiEmotion = MOCHI_DEFAULT;
 
 volatile bool modeChangedFlag = false;
 volatile bool touchTriggeredFlag = false;
@@ -223,14 +224,14 @@ void Task_General(void* pvParameters) {
                     if (mochiGestureActive) {
                         if (mochiGestureEndTime > 0 && millis() > mochiGestureEndTime) {
                             mochiGestureActive = false;
-                            currentMochiEmotion = MOCHI_DEFAULT;
+                            currentMochiEmotion = appSelectedMochiEmotion;
                             mochiFrameIndex = 0;
                             lastMochiFrameTime = millis();
                         } else {
                             currentMochiEmotion = mochiActiveGestureEmotion;
                         }
                     } else {
-                        currentMochiEmotion = MOCHI_DEFAULT;
+                        currentMochiEmotion = appSelectedMochiEmotion;
                     }
 
                     unsigned long frameNow = millis();

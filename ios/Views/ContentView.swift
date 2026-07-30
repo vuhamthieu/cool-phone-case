@@ -458,7 +458,9 @@ struct FacesView: View {
                                         Button {
                                             selectedEmoteIndex = idx
                                             activePreview = .emote(idx)
-                                            if bleManager.isConnected { bleManager.sendMode(1) }
+                                            if bleManager.isConnected {
+                                                bleManager.sendMode(UInt8(1 + idx))
+                                            }
                                         } label: {
                                             VStack(spacing: 10) {
                                                 // Enlarged emote option box (80 -> 120)
