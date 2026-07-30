@@ -199,41 +199,50 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
-        guard error == nil else { return }
+        guard error == nil else {
+            print("BLE Error discovering characteristics: \(error!.localizedDescription)")
+            return
+        }
 
         if let characteristics = service.characteristics {
             for characteristic in characteristics {
                 if characteristic.uuid == Self.modeCharacteristicUUID {
                     modeCharacteristic = characteristic
                     print("Found Mode Characteristic")
-                    // Dummy read to force iOS pairing dialog immediately
                     peripheral.readValue(for: characteristic)
                 } else if characteristic.uuid == Self.timeCharacteristicUUID {
                     timeCharacteristic = characteristic
                     print("Found Time Characteristic")
-                    // Sync time automatically on connect
-                    syncTime()
                 } else if characteristic.uuid == Self.clockStyleCharacteristicUUID {
                     clockStyleCharacteristic = characteristic
                     print("Found Clock Style Characteristic")
                 } else if characteristic.uuid == Self.settingsCharacteristicUUID {
                     settingsCharacteristic = characteristic
                     print("Found Settings Characteristic")
-                    sendSettings()
                 } else if characteristic.uuid == Self.batteryCharacteristicUUID {
                     batteryCharacteristic = characteristic
                     print("Found Battery Characteristic")
                     peripheral.setNotifyValue(true, for: characteristic)
-                    peripheral.readValue(for: characteristic) // read initially
+                    peripheral.readValue(for: characteristic)
                 }
             }
         }
     }
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
-        guard error == nil else {
-            print("BLE Error updating value: \(error?.localizedDescription ?? "unknown")")
+        if let error = error {
+            print("BLE Read error for \(characteristic.uuid): \(error.localizedDescription)")
+            if (error as NSError).code == CBATTError.insufficientAuthentication.rawValue ||
+               (error as NSError).code == CBATTError.insufficientEncryption.rawValue {
+                print("BLE: Pairing required — iOS should show pairing dialog now")
+            }
             return
+        }
+
+        if characteristic.uuid == Self.modeCharacteristicUUID {
+            print("BLE: Mode read succeeded — device is paired! Syncing time and settings now.")
+            syncTime()
+            sendSettings()
         }
 
         if characteristic.uuid == Self.batteryCharacteristicUUID {
@@ -244,6 +253,14 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
                     print("BLE: Updated battery level: \(level)%")
                 }
             }
+        }
+    }
+
+    func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
+        if let error = error {
+            print("BLE WRITE FAILED for \(characteristic.uuid): \(error.localizedDescription)")
+        } else {
+            print("BLE WRITE OK for \(characteristic.uuid)")
         }
     }
 }

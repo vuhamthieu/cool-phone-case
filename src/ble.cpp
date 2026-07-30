@@ -59,31 +59,32 @@ class ServerCallbacks: public NimBLEServerCallbacks {
 class ModeCallback: public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic *pCharacteristic) override {
         std::string rxValue = pCharacteristic->getValue();
+        Serial.printf("[MODE] onWrite fired! len=%d\n", (int)rxValue.length());
+        for (size_t i = 0; i < rxValue.length(); i++) {
+            Serial.printf("[MODE]   byte[%d] = 0x%02X\n", (int)i, (uint8_t)rxValue[i]);
+        }
         if (rxValue.length() > 0) {
             uint8_t modeVal = rxValue[0];
             if (modeVal <= 1) {
-                SystemMode newMode = (SystemMode)modeVal;
-                currentMode = newMode;
+                currentMode = (SystemMode)modeVal;
                 modeChangedFlag = true;
-                Serial.printf("Mode changed over BLE: %d\n", currentMode);
+                Serial.printf("[MODE] Set currentMode = %d\n", (int)currentMode);
+            } else {
+                Serial.printf("[MODE] Invalid value: %d\n", modeVal);
             }
         }
     }
     void onRead(NimBLECharacteristic *pCharacteristic) override {
-        Serial.println("Mode characteristic READ (pairing trigger)");
+        Serial.println("[MODE] onRead fired");
     }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Time characteristic: 4-byte little-endian Unix timestamp
-// ─────────────────────────────────────────────────────────────────────────────
 class TimeCallback: public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic *pCharacteristic) override {
         std::string rxValue = pCharacteristic->getValue();
-
-        Serial.printf("TimeCallback: received %d byte(s)\n", (int)rxValue.length());
+        Serial.printf("[TIME] onWrite fired! len=%d\n", (int)rxValue.length());
         for (size_t i = 0; i < rxValue.length(); i++) {
-            Serial.printf("  [%d] = 0x%02X\n", (int)i, (uint8_t)rxValue[i]);
+            Serial.printf("[TIME]   byte[%d] = 0x%02X\n", (int)i, (uint8_t)rxValue[i]);
         }
 
         uint32_t timestamp = 0;
@@ -95,44 +96,48 @@ class TimeCallback: public NimBLECharacteristicCallbacks {
 
         if (timestamp > 0) {
             struct timeval tv;
-            tv.tv_sec  = (time_t)timestamp;   
+            tv.tv_sec  = (time_t)timestamp;
             tv.tv_usec = 0;
             settimeofday(&tv, NULL);
             timeSynced = true;
-            Serial.printf("RTC synced. Local time set to Unix: %u\n", timestamp);
+            Serial.printf("[TIME] RTC synced to Unix: %u\n", timestamp);
         } else {
-            Serial.println("TimeCallback: invalid timestamp, RTC not updated");
+            Serial.println("[TIME] Invalid timestamp");
         }
     }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Clock style characteristic: 1-byte style index [0=BIG_DIGITAL | 1=DIGITAL_DATE | 2=ANALOG]
-// ─────────────────────────────────────────────────────────────────────────────
 class ClockStyleCallback: public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic *pCharacteristic) override {
         std::string rxValue = pCharacteristic->getValue();
+        Serial.printf("[CLOCK_STYLE] onWrite fired! len=%d\n", (int)rxValue.length());
+        for (size_t i = 0; i < rxValue.length(); i++) {
+            Serial.printf("[CLOCK_STYLE]   byte[%d] = 0x%02X\n", (int)i, (uint8_t)rxValue[i]);
+        }
         if (rxValue.length() > 0) {
             uint8_t styleVal = rxValue[0];
             if (styleVal < CLOCK_STYLE_MAX) {
                 currentClockStyle = (ClockStyle)styleVal;
-                Serial.printf("Clock Style changed over BLE: %d\n", currentClockStyle);
+                Serial.printf("[CLOCK_STYLE] Set currentClockStyle = %d\n", (int)currentClockStyle);
+            } else {
+                Serial.printf("[CLOCK_STYLE] Invalid value: %d\n", styleVal);
             }
         }
     }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Settings characteristic: bit 0 = Notifications, bit 1 = Media
-// ─────────────────────────────────────────────────────────────────────────────
 class SettingsCallback: public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic *pCharacteristic) override {
         std::string rxValue = pCharacteristic->getValue();
+        Serial.printf("[SETTINGS] onWrite fired! len=%d\n", (int)rxValue.length());
+        for (size_t i = 0; i < rxValue.length(); i++) {
+            Serial.printf("[SETTINGS]   byte[%d] = 0x%02X\n", (int)i, (uint8_t)rxValue[i]);
+        }
         if (rxValue.length() > 0) {
             uint8_t flags = rxValue[0];
             notificationsEnabled = (flags & 0x01) != 0;
             mediaControlEnabled = (flags & 0x02) != 0;
-            Serial.printf("Settings updated: Notifications=%d, Media=%d\n", notificationsEnabled, mediaControlEnabled);
+            Serial.printf("[SETTINGS] Notifications=%d, Media=%d\n", notificationsEnabled, mediaControlEnabled);
         }
     }
 };
