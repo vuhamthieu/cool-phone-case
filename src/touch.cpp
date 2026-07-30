@@ -54,17 +54,11 @@ void touchProcess() {
         // Edge detection settled
         if (currentTouchState == HIGH && !touchTriggeredFlag) {
             touchTriggeredFlag = true;
-            
-            // Cycle sub-states based on current mode
-            switch (currentMode) {
-                case MODE_CLOCK:
-                    currentClockStyle = (ClockStyle)((currentClockStyle + 1) % CLOCK_STYLE_MAX);
-                    Serial.printf("Clock Style changed to: %d\n", currentClockStyle);
-                    break;
-                case MODE_MOCHI:
-                    mochiTouchStartTime = millis();
-                    mochiTouchIsHeld = false;
-                    break;
+
+            // Touch only controls Mochi emote mode — clock style is set by the iOS app via BLE
+            if (currentMode == MODE_MOCHI) {
+                mochiTouchStartTime = millis();
+                mochiTouchIsHeld = false;
             }
         } else if (currentTouchState == LOW && touchTriggeredFlag) {
             // Touch released
