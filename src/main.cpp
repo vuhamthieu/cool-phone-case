@@ -10,9 +10,9 @@
 #include "touch.h"
 
 // Global state definitions
-SystemMode currentMode = MODE_MOCHI;
-ClockStyle currentClockStyle = CLOCK_BIG_DIGITAL;
-MochiEmotion currentMochiEmotion = MOCHI_HAPPY;
+volatile SystemMode currentMode = MODE_CLOCK;
+volatile ClockStyle currentClockStyle = CLOCK_BIG_DIGITAL;
+volatile MochiEmotion currentMochiEmotion = MOCHI_DEFAULT;
 
 volatile bool modeChangedFlag = false;
 volatile bool touchTriggeredFlag = false;

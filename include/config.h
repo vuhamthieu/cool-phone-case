@@ -47,9 +47,9 @@ enum MochiEmotion {
 };
 
 // Global States
-extern SystemMode currentMode;
-extern ClockStyle currentClockStyle;
-extern MochiEmotion currentMochiEmotion;
+extern volatile SystemMode currentMode;
+extern volatile ClockStyle currentClockStyle;
+extern volatile MochiEmotion currentMochiEmotion;
 extern volatile bool modeChangedFlag;
 extern volatile bool touchTriggeredFlag;
 extern bool timeSynced;
