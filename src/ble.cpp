@@ -547,6 +547,16 @@ void ancsTask(void *pvParameters) {
                             uint8_t amsCmd[] = {2, 0, 2}; // Entity: Track, Attr: Artist, Attr: Title
                             pEntityUpdateChar->writeValue(amsCmd, sizeof(amsCmd), true);
                             Serial.println("AMS Command written to Entity Update!");
+                            
+                            // 🚨 THÊM ĐOẠN NÀY ĐỂ ÉP IPHONE THỨC GIẤC:
+                            // Gửi lệnh Toggle Play/Pause (Mã 2) vào Remote Command
+                            if (pRemoteCmdChar != nullptr) {
+                                vTaskDelay(pdMS_TO_TICKS(300));
+                                uint8_t playPauseCmd[] = {2}; 
+                                pRemoteCmdChar->writeValue(playPauseCmd, sizeof(playPauseCmd), true);
+                                Serial.println("🔥 ESP32 VỪA TÁT IPHONE BẰNG LỆNH PLAY/PAUSE!");
+                            }
+
                         }
                     } else {
                         Serial.println("AMS Service NOT found.");
