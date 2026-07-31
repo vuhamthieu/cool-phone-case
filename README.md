@@ -4,9 +4,11 @@
 
 ## Overview
 
-OverByte is an open-source, cyberpunk-style smart phone case featuring a secondary OLED display on the back of the phone. The system is designed to provide a minimalist, low-power interface for status indicators, watch faces, notification text, and interactive elements.
+So recently, I had this idea for a working second screen on the back of the phone. I just thought it might be interesting and look pretty cool to have something going on back there. 😄
 
-The project consists of a custom ESP32-C3 hardware assembly embedded within a 3D-printed case, paired with a native iOS companion app built in Swift/SwiftUI. Together, they communicate via Bluetooth Low Energy (BLE) and Wi-Fi to display real-time clocks, run custom text marquee notifications, show haptic emotes, and support local OTA firmware updates.
+That's basically how **OverByte** started. It’s a custom-built, cyberpunk-style smart case with a 1-bit OLED display, a touch sensor, and a native iOS app that connects via BLE. 
+
+Nothing too crazy or battery-draining—just a raw, minimalist screen that shows the time, reacts to your touch with some fun emotes, and even streams the iPhone's camera. Just a fun little side project to make the back of the phone less boring!
 
 ## Key Features
 
