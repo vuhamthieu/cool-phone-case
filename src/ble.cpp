@@ -444,26 +444,43 @@ static void notifyCB(NimBLERemoteCharacteristic* pRemoteCharacteristic, uint8_t*
             }
         }
     } else if (pRemoteCharacteristic->getUUID().equals(NimBLEUUID(AMS_ENTITY_UPDATE_UUID))) {
+        // Print raw bytes from iOS for debugging
+        Serial.printf("\n[AMS RAW] Received %d bytes from iOS: ", (int)length);
+        for(size_t i = 0; i < length; i++) Serial.printf("%02X ", pData[i]);
+        Serial.println();
+
         if (length >= 3) {
             uint8_t entityID = pData[0];
             uint8_t attributeID = pData[1];
-            uint8_t flags = pData[2]; // EntityUpdateFlags
             
-            if (entityID == 2) { // EntityIDTrack
+            // Entity 2: Track attributes (artist, title, etc.)
+            if (entityID == 2) { 
                 size_t strLen = length - 3;
-                if (attributeID == 0) { // Artist
+                
+                if (attributeID == 0) { // Attribute 0: Artist Name
                     size_t cpyLen = (strLen < sizeof(currentArtist) - 1) ? strLen : sizeof(currentArtist) - 1;
                     memcpy((void*)currentArtist, &pData[3], cpyLen);
                     currentArtist[cpyLen] = '\0';
-                    Serial.printf("[AMS] Track Artist: %s\n", currentArtist);
-                } else if (attributeID == 2) { // Title
+                    Serial.printf("[AMS] Artist: %s\n", currentArtist);
+                    
+                    // Trigger display refresh for updated artist
+                    hasMediaUpdate = true;
+                    triggerDisplayRefresh();
+                    
+                } else if (attributeID == 2) { // Attribute 2: Song Title
                     size_t cpyLen = (strLen < sizeof(currentSong) - 1) ? strLen : sizeof(currentSong) - 1;
                     memcpy((void*)currentSong, &pData[3], cpyLen);
                     currentSong[cpyLen] = '\0';
-                    Serial.printf("[AMS] Track Title: %s\n", currentSong);
+                    Serial.printf("[AMS] Song: %s\n", currentSong);
+                    
+                    // Trigger display refresh for updated title
                     hasMediaUpdate = true;
                     triggerDisplayRefresh();
                 }
+            }
+            // Entity 1: Player attributes (play/pause state, etc.)
+            else if (entityID == 1) {
+                 Serial.println("[AMS] Player state changed.");
             }
         }
     }
@@ -547,14 +564,12 @@ void ancsTask(void *pvParameters) {
                             uint8_t amsCmd[] = {2, 0, 2}; // Entity: Track, Attr: Artist, Attr: Title
                             pEntityUpdateChar->writeValue(amsCmd, sizeof(amsCmd), true);
                             Serial.println("AMS Command written to Entity Update!");
-                            
-                            // 🚨 THÊM ĐOẠN NÀY ĐỂ ÉP IPHONE THỨC GIẤC:
-                            // Gửi lệnh Toggle Play/Pause (Mã 2) vào Remote Command
+
                             if (pRemoteCmdChar != nullptr) {
                                 vTaskDelay(pdMS_TO_TICKS(300));
                                 uint8_t playPauseCmd[] = {2}; 
                                 pRemoteCmdChar->writeValue(playPauseCmd, sizeof(playPauseCmd), true);
-                                Serial.println("🔥 ESP32 VỪA TÁT IPHONE BẰNG LỆNH PLAY/PAUSE!");
+                                Serial.println(" ESP32 Just command IPHONE PLAY/PAUSE!");
                             }
 
                         }
