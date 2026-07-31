@@ -8,6 +8,7 @@
 #define CHARACTERISTIC_TIME_UUID      "e3223119-944c-477c-abf1-efac3e8b15d0"
 #define CHARACTERISTIC_CLOCK_STYLE_UUID "c5b6a7d8-e9f0-1234-abcd-ef1234567890"
 #define CHARACTERISTIC_SETTINGS_UUID    "d4b6a7d8-e9f0-1234-abcd-ef1234567891"
+#define CHARACTERISTIC_MEDIA_UUID       "e5b6a7d8-e9f0-1234-abcd-ef1234567892"
 
 // ANCS UUIDs
 #define ANCS_SERVICE_UUID         "7905F431-B5CE-4E99-A40F-4B1E122D00D0"
@@ -63,6 +64,11 @@ extern bool mediaControlEnabled;
 extern volatile bool hasNewNotification;
 extern char notificationApp[32];
 extern char notificationSender[64];
+
+// Media State
+extern volatile bool hasMediaUpdate;
+extern char currentSong[32];
+extern char currentArtist[32];
 
 // Battery & Multitasking States
 extern volatile bool isLowBattery;

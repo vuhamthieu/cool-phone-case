@@ -270,3 +270,30 @@ void renderNotification(const char* appName, const char* senderName) {
     int senderWidth = u8g2.getStrWidth(senderName);
     u8g2.drawStr((128 - senderWidth) / 2, 45, senderName);
 }
+
+void renderMedia(const char* song, const char* artist) {
+    u8g2.clearBuffer();
+    
+    // Draw header text
+    u8g2.setFont(u8g2_font_6x10_tf);
+    u8g2.drawStr(12, 12, "[MUSIC]");
+    
+    // Draw musical eighth notes
+    u8g2.drawFilledEllipse(70, 11, 3, 2);
+    u8g2.drawVLine(72, 3, 9);
+    u8g2.drawFilledEllipse(82, 10, 3, 2);
+    u8g2.drawVLine(84, 2, 9);
+    u8g2.drawLine(72, 3, 84, 2);
+    u8g2.drawLine(72, 4, 84, 3);
+    
+    // Horizontal separator
+    u8g2.drawHLine(0, 16, 128);
+    
+    // Render song name (centered, larger font)
+    u8g2.setFont(u8g2_font_7x14_tf);
+    drawTextCentered(36, song);
+    
+    // Render artist name (centered, smaller font)
+    u8g2.setFont(u8g2_font_6x10_tf);
+    drawTextCentered(53, artist);
+}

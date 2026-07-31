@@ -10,6 +10,8 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     static let timeCharacteristicUUID       = CBUUID(string: "e3223119-944c-477c-abf1-efac3e8b15d0")
     static let clockStyleCharacteristicUUID = CBUUID(string: "c5b6a7d8-e9f0-1234-abcd-ef1234567890")
     static let settingsCharacteristicUUID   = CBUUID(string: "d4b6a7d8-e9f0-1234-abcd-ef1234567891")
+    static let mediaCharacteristicUUID      = CBUUID(string: "e5b6a7d8-e9f0-1234-abcd-ef1234567892")
+
 
     // Standard GATT Battery service and characteristic UUIDs
     static let batteryServiceUUID        = CBUUID(string: "180F")
@@ -30,7 +32,9 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     private var timeCharacteristic: CBCharacteristic?
     private var clockStyleCharacteristic: CBCharacteristic?
     private var settingsCharacteristic: CBCharacteristic?
+    private var mediaCharacteristic: CBCharacteristic?
     private var batteryCharacteristic: CBCharacteristic?
+
 
     override init() {
         super.init()
@@ -130,6 +134,20 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         peripheral.writeValue(data, for: char, type: .withResponse)
         print("BLE: Sent settings flags \(flags) to ESP32")
     } 
+
+    /// Send media information to the ESP32 (formatted as "Song|Artist")
+    func sendMediaInfo(song: String, artist: String) {
+        guard let peripheral = activePeripheral, let char = mediaCharacteristic else {
+            print("BLE Warning: Device not connected or media characteristic missing")
+            return
+        }
+        let message = "\(song)|\(artist)"
+        if let data = message.data(using: .utf8) {
+            peripheral.writeValue(data, for: char, type: .withResponse)
+            print("BLE: Sent media info '\(message)' to ESP32")
+        }
+    }
+
     
     // MARK: - CBCentralManagerDelegate
 
@@ -174,10 +192,12 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         timeCharacteristic       = nil
         clockStyleCharacteristic = nil
         settingsCharacteristic   = nil
+        mediaCharacteristic      = nil
         batteryCharacteristic    = nil
         activePeripheral         = nil
         connectionStatusText     = "Disconnected"
         startScanning()
+
     }
 
     // MARK: - CBPeripheralDelegate
@@ -192,9 +212,11 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
                         [Self.modeCharacteristicUUID,
                          Self.timeCharacteristicUUID,
                          Self.clockStyleCharacteristicUUID,
-                         Self.settingsCharacteristicUUID],
+                         Self.settingsCharacteristicUUID,
+                         Self.mediaCharacteristicUUID],
                         for: service
                     )
+
                 } else if service.uuid == Self.batteryServiceUUID {
                     peripheral.discoverCharacteristics([Self.batteryCharacteristicUUID], for: service)
                 }
@@ -223,12 +245,16 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
                 } else if characteristic.uuid == Self.settingsCharacteristicUUID {
                     settingsCharacteristic = characteristic
                     print("Found Settings Characteristic")
+                } else if characteristic.uuid == Self.mediaCharacteristicUUID {
+                    mediaCharacteristic = characteristic
+                    print("Found Media Characteristic")
                 } else if characteristic.uuid == Self.batteryCharacteristicUUID {
                     batteryCharacteristic = characteristic
                     print("Found Battery Characteristic")
                     peripheral.setNotifyValue(true, for: characteristic)
                     peripheral.readValue(for: characteristic)
                 }
+
             }
         }
     }

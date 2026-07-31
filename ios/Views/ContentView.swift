@@ -173,10 +173,20 @@ struct HomeView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 28)
 
+                // ── Section Title: MEDIA SIMULATOR (Scale: 6 -> 9)
+                PixelText("MEDIA SIMULATOR", size: 9, color: glyphTextMuted)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 10)
+
+                MediaSimulatorCard()
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 28)
+
                 // ── Section Title: SETTINGS (Scale: 6 -> 9)
                 PixelText("SETTINGS", size: 9, color: glyphTextMuted)
                     .padding(.horizontal, 20)
                     .padding(.bottom, 10)
+
 
                 // ── Secondary Nav Rows (Enlarged CustomIconContainer circle sizes)
                 VStack(spacing: 10) {
@@ -1003,3 +1013,76 @@ struct PrimaryIconContainer: View {
         }
     }
 }
+
+// MARK: - Now Playing Media Debug Simulator
+struct MediaSimulatorCard: View {
+    @EnvironmentObject var bleManager: BLEManager
+    @State private var song: String = "Starlight"
+    @State private var artist: String = "Muse"
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Image(systemName: "music.note")
+                    .foregroundColor(glyphAccent)
+                    .font(.system(size: 16, weight: .bold))
+                PixelText("MEDIA SIMULATOR", size: 10, color: glyphTextActive)
+            }
+            
+            VStack(alignment: .leading, spacing: 6) {
+                PixelText("SONG TITLE", size: 8, color: glyphTextMuted)
+                TextField("Song...", text: $song)
+                    .textFieldStyle(PlainTextFieldStyle())
+                    .font(.custom(pixelFont, size: 10))
+                    .foregroundColor(.white)
+                    .padding(10)
+                    .background(Color.black)
+                    .cornerRadius(4)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                    )
+            }
+            
+            VStack(alignment: .leading, spacing: 6) {
+                PixelText("ARTIST", size: 8, color: glyphTextMuted)
+                TextField("Artist...", text: $artist)
+                    .textFieldStyle(PlainTextFieldStyle())
+                    .font(.custom(pixelFont, size: 10))
+                    .foregroundColor(.white)
+                    .padding(10)
+                    .background(Color.black)
+                    .cornerRadius(4)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                    )
+            }
+            
+            Button {
+                bleManager.sendMediaInfo(song: song, artist: artist)
+            } label: {
+                HStack {
+                    Spacer()
+                    Image(systemName: "paperplane.fill")
+                        .foregroundColor(.black)
+                        .font(.system(size: 12))
+                    PixelText("SEND TO CASE", size: 9, color: .black)
+                    Spacer()
+                }
+                .padding(.vertical, 12)
+                .background(bleManager.isConnected ? Color.white : Color.gray)
+                .cornerRadius(6)
+            }
+            .disabled(!bleManager.isConnected)
+        }
+        .padding(18)
+        .background(glyphCardBg)
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.white.opacity(0.05), lineWidth: 1)
+        )
+    }
+}
+

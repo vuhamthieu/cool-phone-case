@@ -28,6 +28,12 @@ volatile bool hasNewNotification = false;
 char notificationApp[32] = {0};
 char notificationSender[64] = {0};
 
+// Media State
+volatile bool hasMediaUpdate = false;
+char currentSong[32] = "No Media";
+char currentArtist[32] = "Unknown";
+
+
 
 // Battery & Multitasking States
 volatile bool isLowBattery = false;
@@ -121,6 +127,8 @@ void Task_General(void* pvParameters) {
     bool blinkState = false;
     
     unsigned long notificationStartTime = 0;
+    unsigned long mediaStartTime = 0;
+
     
     // Animation timing for Mochi
     unsigned long lastMochiFrameTime = 0;
@@ -197,6 +205,10 @@ void Task_General(void* pvParameters) {
                 notificationStartTime = millis();
                 hasNewNotification = false;
             }
+            if (hasMediaUpdate) {
+                mediaStartTime = millis();
+                hasMediaUpdate = false;
+            }
 
             if (notificationStartTime > 0 && (millis() - notificationStartTime < 5000)) {
                 if (xSemaphoreTake(displayMutex, portMAX_DELAY) == pdTRUE) {
@@ -206,8 +218,18 @@ void Task_General(void* pvParameters) {
                     xSemaphoreGive(displayMutex);
                 }
                 vTaskDelay(pdMS_TO_TICKS(100)); // Refresh at 10Hz
+            } else if (mediaStartTime > 0 && (millis() - mediaStartTime < 5000)) {
+                if (xSemaphoreTake(displayMutex, portMAX_DELAY) == pdTRUE) {
+                    displayClear();
+                    renderMedia(currentSong, currentArtist);
+                    displayUpdate();
+                    xSemaphoreGive(displayMutex);
+                }
+                vTaskDelay(pdMS_TO_TICKS(100)); // Refresh at 10Hz
             } else {
                 notificationStartTime = 0; // MUST reset the timer
+                mediaStartTime = 0;        // MUST reset the timer
+
                 switch (currentMode) {
                     case MODE_CLOCK:
                     if (xSemaphoreTake(displayMutex, portMAX_DELAY) == pdTRUE) {

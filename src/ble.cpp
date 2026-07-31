@@ -20,10 +20,10 @@ static volatile uint16_t activeConnHandle = 0xFFFF;
 static volatile bool shouldStartANCS = false;
 
 struct NimBLEClientHack {
-    void* vtable;
+    void* vtable;               
     NimBLEAddress m_peerAddress;
+    uint16_t m_conn_id;    
     int m_lastErr;
-    uint16_t m_conn_id;
     bool m_connEstablished;
 };
 
@@ -37,7 +37,6 @@ class ServerCallbacks: public NimBLEServerCallbacks {
         connectedPeerAddress = NimBLEAddress(desc->peer_ota_addr);
         Serial.printf("iOS App Connected via BLE: %s (conn_handle=%d)\n", connectedPeerAddress.toString().c_str(), activeConnHandle);
         
-        // If already bonded in database, wait for iOS to secure the link
         if (NimBLEDevice::isBonded(connectedPeerAddress)) {
             Serial.println("Device is already bonded in NVS database. Waiting for iOS to auto-encrypt...");
         } else {
@@ -174,6 +173,40 @@ class SettingsCallback: public NimBLECharacteristicCallbacks {
     }
 };
 
+class MediaCallback: public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic *pCharacteristic) override {
+        std::string value = pCharacteristic->getValue();
+        Serial.printf("[MEDIA] onWrite fired! len=%d\n", (int)value.length());
+        if (value.length() > 0) {
+            size_t delimiterPos = value.find('|');
+            if (delimiterPos != std::string::npos) {
+                std::string songPart = value.substr(0, delimiterPos);
+                std::string artistPart = value.substr(delimiterPos + 1);
+                
+                strncpy((char*)currentSong, songPart.c_str(), sizeof(currentSong) - 1);
+                currentSong[sizeof(currentSong) - 1] = '\0';
+                
+                strncpy((char*)currentArtist, artistPart.c_str(), sizeof(currentArtist) - 1);
+                currentArtist[sizeof(currentArtist) - 1] = '\0';
+                
+                Serial.printf("[MEDIA] Parsed Song: '%s', Artist: '%s'\n", currentSong, currentArtist);
+            } else {
+                strncpy((char*)currentSong, value.c_str(), sizeof(currentSong) - 1);
+                currentSong[sizeof(currentSong) - 1] = '\0';
+                strncpy((char*)currentArtist, "Unknown", sizeof(currentArtist) - 1);
+                currentArtist[sizeof(currentArtist) - 1] = '\0';
+                Serial.printf("[MEDIA] No delimiter. Parsed Song: '%s'\n", currentSong);
+            }
+            hasMediaUpdate = true;
+            triggerDisplayRefresh();
+        }
+    }
+    void onWrite(NimBLECharacteristic *pCharacteristic, ble_gap_conn_desc* desc) override {
+        onWrite(pCharacteristic);
+    }
+};
+
+
 class MySecurityCallbacks : public NimBLESecurityCallbacks {
     uint32_t onPassKeyRequest() override {
         Serial.println("[SECURITY] onPassKeyRequest (returning 123456)");
@@ -258,7 +291,15 @@ void bleInit() {
     );
     pSettingsChar->setCallbacks(new SettingsCallback());
 
+    // Media characteristic
+    NimBLECharacteristic *pMediaChar = pService->createCharacteristic(
+        CHARACTERISTIC_MEDIA_UUID,
+        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::WRITE_AUTHEN
+    );
+    pMediaChar->setCallbacks(new MediaCallback());
+
     pService->start();
+
 
     // Standard GATT Battery Service (0x180F) & Battery Level Characteristic (0x2A19)
     NimBLEService *pBatteryService = pServer->createService(NimBLEUUID((uint16_t)0x180F));
@@ -338,16 +379,18 @@ static NimBLERemoteCharacteristic* pDataSource = nullptr;
 static volatile uint32_t pendingNotifUID = 0;
 
 static void notifyCB(NimBLERemoteCharacteristic* pRemoteCharacteristic, uint8_t* pData, size_t length, bool isNotify) {
-    if (!notificationsEnabled) return;
+    Serial.println("\n--- [ANCS DEBUG] RAW PACKET RECEIVED ---");
+    Serial.printf("UUID: %s | Len: %d\n", pRemoteCharacteristic->getUUID().toString().c_str(), (int)length);
 
     if (pRemoteCharacteristic->getUUID().equals(NimBLEUUID(ANCS_NOTIF_SRC_UUID))) {
         if (length >= 8) {
             uint8_t eventID = pData[0];
             uint32_t notifUID = pData[4] | (pData[5] << 8) | (pData[6] << 16) | (pData[7] << 24);
 
-            // 0 = Added, 1 = Modified, 2 = Removed
+            Serial.printf("[ANCS] Notification Event -> ID: %d, UID: %u\n", eventID, notifUID);
+            
+            // 0 = Added, 1 = Modified
             if (eventID == 0 || eventID == 1) { 
-                Serial.printf("ANCS: New Notification UID: %u\n", notifUID);
                 pendingNotifUID = notifUID;
             }
         }
@@ -370,17 +413,10 @@ static void notifyCB(NimBLERemoteCharacteristic* pRemoteCharacteristic, uint8_t*
                     size_t cpyLen = (attrLen < sizeof(bundleID) - 1) ? attrLen : sizeof(bundleID) - 1;
                     memcpy(bundleID, &pData[idx], cpyLen);
                     
-                    // User Request: Use strrchr to slice the bundle ID
                     char* lastDot = strrchr(bundleID, '.');
-                    if (lastDot != nullptr) {
-                        if (*(lastDot + 1) != '\0') {
-                            strncpy((char*)notificationApp, lastDot + 1, sizeof(notificationApp) - 1);
-                        } else {
-                            // Dot is at the very end? Fallback to full
-                            strncpy((char*)notificationApp, bundleID, sizeof(notificationApp) - 1);
-                        }
+                    if (lastDot != nullptr && *(lastDot + 1) != '\0') {
+                        strncpy((char*)notificationApp, lastDot + 1, sizeof(notificationApp) - 1);
                     } else {
-                        // No dot found, fallback to full string
                         strncpy((char*)notificationApp, bundleID, sizeof(notificationApp) - 1);
                     }
                     hasData = true;
@@ -396,7 +432,7 @@ static void notifyCB(NimBLERemoteCharacteristic* pRemoteCharacteristic, uint8_t*
                 if (strlen(notificationSender) == 0) {
                     strncpy((char*)notificationSender, "Notification", sizeof(notificationSender)-1);
                 }
-                Serial.printf("ANCS Parsed -> App: %s, Sender: %s\n", notificationApp, notificationSender);
+                Serial.printf("[ANCS SUCCESS] App: %s | Sender: %s\n", notificationApp, notificationSender);
                 hasNewNotification = true;
             }
         }
@@ -404,6 +440,9 @@ static void notifyCB(NimBLERemoteCharacteristic* pRemoteCharacteristic, uint8_t*
 }
 
 void ancsTask(void *pvParameters) {
+    int retryDelay = 1500;
+    const int maxDelay = 5000;
+    
     while (true) {
         if (shouldStartANCS && isConnected && activeConnHandle != 0xFFFF) {
             ble_gap_conn_desc desc;
@@ -411,12 +450,13 @@ void ancsTask(void *pvParameters) {
                 if (!desc.sec_state.encrypted) {
                     Serial.println("ANCS: Connection not encrypted yet. Waiting for encryption/bonding...");
                     vTaskDelay(pdMS_TO_TICKS(500));
-                    continue; // Check again in next loop
+                    continue; 
                 }
             }
 
             shouldStartANCS = false;
-            vTaskDelay(pdMS_TO_TICKS(500)); // Short delay after encryption to settle
+            
+            vTaskDelay(pdMS_TO_TICKS(retryDelay)); 
 
             if (pANCSClient == nullptr) {
                 pANCSClient = NimBLEDevice::createClient();
@@ -427,9 +467,13 @@ void ancsTask(void *pvParameters) {
                 pHack->m_conn_id = activeConnHandle;
                 pHack->m_connEstablished = true;
 
-                Serial.printf("ANCS: Querying ANCS GATT Service on active conn_handle %d...\n", activeConnHandle);
+                Serial.printf("ANCS: Querying ANCS service (delay=%d ms)...\n", retryDelay);
+                pANCSClient->deleteServices();
+
                 NimBLERemoteService* pANCSService = pANCSClient->getService(NimBLEUUID(ANCS_SERVICE_UUID));
+                
                 if (pANCSService != nullptr) {
+                    Serial.println("ANCS Service found!");
                     pControlPoint = pANCSService->getCharacteristic(NimBLEUUID(ANCS_CTRL_PT_UUID));
                     pDataSource = pANCSService->getCharacteristic(NimBLEUUID(ANCS_DATA_SRC_UUID));
                     NimBLERemoteCharacteristic* pNotifSource = pANCSService->getCharacteristic(NimBLEUUID(ANCS_NOTIF_SRC_UUID));
@@ -442,8 +486,12 @@ void ancsTask(void *pvParameters) {
                         pNotifSource->subscribe(true, notifyCB);
                         Serial.println("ANCS Notification Source Subscribed!");
                     }
+                    retryDelay = 1500;
                 } else {
-                    Serial.println("ANCS Service not exposed by peer. (Enable 'Share System Notifications' in iOS Bluetooth settings)");
+                    Serial.println("ANCS Service not exposed by peer yet. Retrying...");
+                    shouldStartANCS = true;
+                    retryDelay += 1000;
+                    if (retryDelay > maxDelay) retryDelay = maxDelay;
                 }
             }
         }
@@ -451,19 +499,22 @@ void ancsTask(void *pvParameters) {
         // Process pending notification requests outside the BLE callback
         if (pendingNotifUID != 0 && pControlPoint != nullptr && pANCSClient != nullptr && pANCSClient->isConnected()) {
             uint32_t uid = pendingNotifUID;
-            pendingNotifUID = 0; // Clear it
+            pendingNotifUID = 0;
 
-            uint8_t cmd[8];
+            Serial.printf("[ANCS] Requesting attributes for UID: %u\n", uid);
+
+            uint8_t cmd[9];
             cmd[0] = 0; // CommandIDGetNotificationAttributes
             cmd[1] = uid & 0xFF; 
             cmd[2] = (uid >> 8) & 0xFF; 
             cmd[3] = (uid >> 16) & 0xFF; 
-            cmd[4] = (uid >> 24) & 0xFF; // UID
-            cmd[5] = 0; // AppIdentifier
-            cmd[6] = 1; // Title
-            cmd[7] = 32; // Max Title Len
+            cmd[4] = (uid >> 24) & 0xFF; // UID (4 bytes)
+            cmd[5] = 0; // Attribute ID 0: AppIdentifier 
+            cmd[6] = 1; // Attribute ID 1: Title 
+            cmd[7] = 32; // Max Title Len LSB (32 bytes)
+            cmd[8] = 0;  // Max Title Len MSB (0)
             
-            pControlPoint->writeValue(cmd, 8, true);
+            pControlPoint->writeValue(cmd, 9, true);
         }
 
         vTaskDelay(pdMS_TO_TICKS(100)); // check every 100ms

@@ -29,3 +29,6 @@ void drawLowBatteryScreen(bool blinkState);
 
 // Notification
 void renderNotification(const char* appName, const char* senderName);
+
+// Media
+void renderMedia(const char* song, const char* artist);
