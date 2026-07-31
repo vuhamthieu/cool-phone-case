@@ -6,7 +6,12 @@
 #include "nimble/nimble/host/include/host/ble_hs.h"
 #include <sys/time.h>
 
+// AMS UUIDs
+#define AMS_SERVICE_UUID          "89D3502B-0F36-433A-8EF4-C502AD55F8DC"
+#define AMS_ENTITY_UPDATE_UUID    "2F7CABCE-808D-411F-9A0C-BB92BA96C102"
+
 static volatile bool isConnected = false;
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Server connection callbacks
@@ -436,8 +441,32 @@ static void notifyCB(NimBLERemoteCharacteristic* pRemoteCharacteristic, uint8_t*
                 hasNewNotification = true;
             }
         }
+    } else if (pRemoteCharacteristic->getUUID().equals(NimBLEUUID(AMS_ENTITY_UPDATE_UUID))) {
+        if (length >= 3) {
+            uint8_t entityID = pData[0];
+            uint8_t attributeID = pData[1];
+            uint8_t flags = pData[2]; // EntityUpdateFlags
+            
+            if (entityID == 2) { // EntityIDTrack
+                size_t strLen = length - 3;
+                if (attributeID == 0) { // Artist
+                    size_t cpyLen = (strLen < sizeof(currentArtist) - 1) ? strLen : sizeof(currentArtist) - 1;
+                    memcpy((void*)currentArtist, &pData[3], cpyLen);
+                    currentArtist[cpyLen] = '\0';
+                    Serial.printf("[AMS] Track Artist: %s\n", currentArtist);
+                } else if (attributeID == 2) { // Title
+                    size_t cpyLen = (strLen < sizeof(currentSong) - 1) ? strLen : sizeof(currentSong) - 1;
+                    memcpy((void*)currentSong, &pData[3], cpyLen);
+                    currentSong[cpyLen] = '\0';
+                    Serial.printf("[AMS] Track Title: %s\n", currentSong);
+                    hasMediaUpdate = true;
+                    triggerDisplayRefresh();
+                }
+            }
+        }
     }
 }
+
 
 void ancsTask(void *pvParameters) {
     int retryDelay = 1500;
@@ -486,7 +515,30 @@ void ancsTask(void *pvParameters) {
                         pNotifSource->subscribe(true, notifyCB);
                         Serial.println("ANCS Notification Source Subscribed!");
                     }
+
+                    // Query for the AMS Service
+                    Serial.println("AMS: Querying AMS service...");
+                    NimBLERemoteService* pAMSService = pANCSClient->getService(NimBLEUUID(AMS_SERVICE_UUID));
+                    if (pAMSService != nullptr) {
+                        Serial.println("AMS Service found!");
+                        NimBLERemoteCharacteristic* pEntityUpdateChar = pAMSService->getCharacteristic(NimBLEUUID(AMS_ENTITY_UPDATE_UUID));
+                        if (pEntityUpdateChar != nullptr) {
+                            if (pEntityUpdateChar->canNotify()) {
+                                pEntityUpdateChar->subscribe(true, notifyCB);
+                                Serial.println("AMS Entity Update Subscribed!");
+                                
+                                // Command to track Track Entity (2), Artist Attr (0), Title Attr (2)
+                                uint8_t amsCmd[] = {2, 0, 2};
+                                pEntityUpdateChar->writeValue(amsCmd, sizeof(amsCmd), true);
+                                Serial.println("AMS Command written to Entity Update!");
+                            }
+                        }
+                    } else {
+                        Serial.println("AMS Service NOT found.");
+                    }
+
                     retryDelay = 1500;
+
                 } else {
                     Serial.println("ANCS Service not exposed by peer yet. Retrying...");
                     shouldStartANCS = true;
