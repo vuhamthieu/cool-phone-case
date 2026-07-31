@@ -532,26 +532,21 @@ void ancsTask(void *pvParameters) {
                     if (pAMSService != nullptr) {
                         Serial.println("AMS Service found!");
                         
-                        // 1. ĐĂNG KÝ QUYỀN ĐIỀU KHIỂN (Lừa iOS đây là tai nghe/smartwatch thật)
                         NimBLERemoteCharacteristic* pRemoteCmdChar = pAMSService->getCharacteristic(NimBLEUUID(AMS_REMOTE_CMD_UUID));
                         if (pRemoteCmdChar != nullptr && pRemoteCmdChar->canNotify()) {
                             pRemoteCmdChar->subscribe(true, notifyCB);
                             Serial.println("AMS Remote Command Subscribed!");
                         }
 
-                        // Đợi iOS thở một nhịp sau khi đăng ký quyền 1
                         vTaskDelay(pdMS_TO_TICKS(200));
 
-                        // 2. ĐĂNG KÝ QUYỀN ĐỌC TÊN BÀI HÁT
                         NimBLERemoteCharacteristic* pEntityUpdateChar = pAMSService->getCharacteristic(NimBLEUUID(AMS_ENTITY_UPDATE_UUID));
                         if (pEntityUpdateChar != nullptr && pEntityUpdateChar->canNotify()) {
                             pEntityUpdateChar->subscribe(true, notifyCB);
                             Serial.println("AMS Entity Update Subscribed!");
                             
-                            // Đợi iOS thở nhịp 2 trước khi đòi thông tin
                             vTaskDelay(pdMS_TO_TICKS(500));
                             
-                            // 3. GỬI LỆNH YÊU CẦU BÀI HÁT
                             uint8_t amsCmd[] = {2, 0, 2}; // Entity: Track, Attr: Artist, Attr: Title
                             pEntityUpdateChar->writeValue(amsCmd, sizeof(amsCmd), true);
                             Serial.println("AMS Command written to Entity Update!");
