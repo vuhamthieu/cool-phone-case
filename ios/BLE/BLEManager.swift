@@ -148,6 +148,19 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         }
     }
 
+    /// Send custom running text directly to the ESP32
+    func sendRunningText(_ text: String) {
+        guard let peripheral = activePeripheral, let char = mediaCharacteristic else {
+            print("BLE Warning: Device not connected or media characteristic missing")
+            return
+        }
+        if let data = text.data(using: .utf8) {
+            peripheral.writeValue(data, for: char, type: .withResponse)
+            print("BLE: Sent running text '\(text)' to ESP32")
+        }
+    }
+
+
     
     // MARK: - CBCentralManagerDelegate
 

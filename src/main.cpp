@@ -32,6 +32,11 @@ char notificationSender[64] = {0};
 volatile bool hasMediaUpdate = false;
 char currentSong[32] = "No Media";
 char currentArtist[32] = "Unknown";
+char scrollingMessage[128] = "";
+volatile bool isScrollingMessage = false;
+int scrollX = 128;
+int messageWidth = 0;
+
 
 
 
@@ -200,6 +205,22 @@ void Task_General(void* pvParameters) {
                 xSemaphoreGive(displayMutex);
             }
             vTaskDelay(pdMS_TO_TICKS(100)); // Refresh warning screen at 10Hz
+        } else if (isScrollingMessage) {
+            static unsigned long lastScrollTime = 0;
+            if (millis() - lastScrollTime >= 30) {
+                lastScrollTime = millis();
+                if (xSemaphoreTake(displayMutex, portMAX_DELAY) == pdTRUE) {
+                    displayClear();
+                    messageWidth = renderScrollingMessage(scrollingMessage, scrollX);
+                    displayUpdate();
+                    xSemaphoreGive(displayMutex);
+                }
+                scrollX -= 3; // Decrement scrollX by 3 pixels for smooth scrolling
+                if (scrollX < -messageWidth) {
+                    isScrollingMessage = false; // Return to normal display mode
+                }
+            }
+            vTaskDelay(pdMS_TO_TICKS(10)); // Yield to prevent watchdog reset
         } else {
             if (hasNewNotification) {
                 notificationStartTime = millis();

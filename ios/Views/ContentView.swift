@@ -173,8 +173,8 @@ struct HomeView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 28)
 
-                // ── Section Title: MEDIA SIMULATOR (Scale: 6 -> 9)
-                PixelText("MEDIA SIMULATOR", size: 9, color: glyphTextMuted)
+                // ── Section Title: RUNNING TEXT (Scale: 6 -> 9)
+                PixelText("RUNNING TEXT", size: 9, color: glyphTextMuted)
                     .padding(.horizontal, 20)
                     .padding(.bottom, 10)
 
@@ -553,7 +553,6 @@ struct FacesView: View {
 struct SettingsPage: View {
     @EnvironmentObject var bleManager: BLEManager
     @Binding var activeScreen: ActiveScreen
-    @State private var notificationsOn = true
     @State private var brightness: Double = 0.8
 
     var body: some View {
@@ -579,7 +578,18 @@ struct SettingsPage: View {
                         HStack {
                             PixelText("NOTIFICATIONS", size: 10, color: glyphTextActive) // 7 -> 10
                             Spacer()
-                            Toggle("", isOn: $notificationsOn)
+                            Toggle("", isOn: $bleManager.isNotificationEnabled)
+                                .toggleStyle(SwitchToggleStyle(tint: glyphAccent))
+                                .labelsHidden()
+                        }
+                        .padding(18)
+                        Divider().background(Color.white.opacity(0.05))
+
+                        // Media Control
+                        HStack {
+                            PixelText("MEDIA CONTROL", size: 10, color: glyphTextActive)
+                            Spacer()
+                            Toggle("", isOn: $bleManager.isMediaControlEnabled)
                                 .toggleStyle(SwitchToggleStyle(tint: glyphAccent))
                                 .labelsHidden()
                         }
@@ -604,12 +614,19 @@ struct SettingsPage: View {
                             .stroke(Color.white.opacity(0.05), lineWidth: 1)
                     )
                     .padding(.horizontal, 16)
+                    .onChange(of: bleManager.isNotificationEnabled) { _ in
+                        bleManager.sendSettings()
+                    }
+                    .onChange(of: bleManager.isMediaControlEnabled) { _ in
+                        bleManager.sendSettings()
+                    }
                 }
             }
         }
         .background(glyphBg)
     }
 }
+
 
 // MARK: - Generic Simple Page (Scaled Up)
 
@@ -1014,39 +1031,23 @@ struct PrimaryIconContainer: View {
     }
 }
 
-// MARK: - Now Playing Media Debug Simulator
+// MARK: - Running Text Debug Simulator
 struct MediaSimulatorCard: View {
     @EnvironmentObject var bleManager: BLEManager
-    @State private var song: String = "Starlight"
-    @State private var artist: String = "Muse"
+    @State private var message: String = "Hello World!"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Image(systemName: "music.note")
+                Image(systemName: "text.alignleft")
                     .foregroundColor(glyphAccent)
                     .font(.system(size: 16, weight: .bold))
-                PixelText("MEDIA SIMULATOR", size: 10, color: glyphTextActive)
+                PixelText("RUNNING TEXT SIMULATOR", size: 10, color: glyphTextActive)
             }
             
             VStack(alignment: .leading, spacing: 6) {
-                PixelText("SONG TITLE", size: 8, color: glyphTextMuted)
-                TextField("Song...", text: $song)
-                    .textFieldStyle(PlainTextFieldStyle())
-                    .font(.custom(pixelFont, size: 10))
-                    .foregroundColor(.white)
-                    .padding(10)
-                    .background(Color.black)
-                    .cornerRadius(4)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 4)
-                            .stroke(Color.white.opacity(0.15), lineWidth: 1)
-                    )
-            }
-            
-            VStack(alignment: .leading, spacing: 6) {
-                PixelText("ARTIST", size: 8, color: glyphTextMuted)
-                TextField("Artist...", text: $artist)
+                PixelText("RUNNING TEXT MESSAGE", size: 8, color: glyphTextMuted)
+                TextField("Message...", text: $message)
                     .textFieldStyle(PlainTextFieldStyle())
                     .font(.custom(pixelFont, size: 10))
                     .foregroundColor(.white)
@@ -1060,7 +1061,7 @@ struct MediaSimulatorCard: View {
             }
             
             Button {
-                bleManager.sendMediaInfo(song: song, artist: artist)
+                bleManager.sendRunningText(message)
             } label: {
                 HStack {
                     Spacer()
@@ -1085,4 +1086,5 @@ struct MediaSimulatorCard: View {
         )
     }
 }
+
 

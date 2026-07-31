@@ -32,3 +32,6 @@ void renderNotification(const char* appName, const char* senderName);
 
 // Media
 void renderMedia(const char* song, const char* artist);
+
+// Scrolling Message Marquee
+int renderScrollingMessage(const char* text, int xPos);

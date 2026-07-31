@@ -69,6 +69,11 @@ extern char notificationSender[64];
 extern volatile bool hasMediaUpdate;
 extern char currentSong[32];
 extern char currentArtist[32];
+extern char scrollingMessage[128];
+extern volatile bool isScrollingMessage;
+extern int scrollX;
+extern int messageWidth;
+
 
 // Battery & Multitasking States
 extern volatile bool isLowBattery;

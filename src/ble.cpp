@@ -189,23 +189,14 @@ class MediaCallback: public NimBLECharacteristicCallbacks {
             if (delimiterPos != std::string::npos) {
                 std::string songPart = value.substr(0, delimiterPos);
                 std::string artistPart = value.substr(delimiterPos + 1);
-                
-                strncpy((char*)currentSong, songPart.c_str(), sizeof(currentSong) - 1);
-                currentSong[sizeof(currentSong) - 1] = '\0';
-                
-                strncpy((char*)currentArtist, artistPart.c_str(), sizeof(currentArtist) - 1);
-                currentArtist[sizeof(currentArtist) - 1] = '\0';
-                
-                Serial.printf("[MEDIA] Parsed Song: '%s', Artist: '%s'\n", currentSong, currentArtist);
+                snprintf(scrollingMessage, sizeof(scrollingMessage), "%s - %s", songPart.c_str(), artistPart.c_str());
             } else {
-                strncpy((char*)currentSong, value.c_str(), sizeof(currentSong) - 1);
-                currentSong[sizeof(currentSong) - 1] = '\0';
-                strncpy((char*)currentArtist, "Unknown", sizeof(currentArtist) - 1);
-                currentArtist[sizeof(currentArtist) - 1] = '\0';
-                Serial.printf("[MEDIA] No delimiter. Parsed Song: '%s'\n", currentSong);
+                strncpy(scrollingMessage, value.c_str(), sizeof(scrollingMessage) - 1);
+                scrollingMessage[sizeof(scrollingMessage) - 1] = '\0';
             }
-            hasMediaUpdate = true;
-            triggerDisplayRefresh();
+            scrollX = 128;
+            isScrollingMessage = true;
+            Serial.printf("[MEDIA] Set scrolling message: '%s'\n", scrollingMessage);
         }
     }
     void onWrite(NimBLECharacteristic *pCharacteristic, ble_gap_conn_desc* desc) override {

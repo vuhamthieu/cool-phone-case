@@ -297,3 +297,10 @@ void renderMedia(const char* song, const char* artist) {
     u8g2.setFont(u8g2_font_6x10_tf);
     drawTextCentered(53, artist);
 }
+
+int renderScrollingMessage(const char* text, int xPos) {
+    u8g2.setFont(u8g2_font_9x15_tf);
+    int w = u8g2.getStrWidth(text);
+    u8g2.drawStr(xPos, 36, text);
+    return w;
+}
