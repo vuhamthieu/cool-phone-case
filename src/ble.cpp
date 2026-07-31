@@ -9,6 +9,8 @@
 // AMS UUIDs
 #define AMS_SERVICE_UUID          "89D3502B-0F36-433A-8EF4-C502AD55F8DC"
 #define AMS_ENTITY_UPDATE_UUID    "2F7CABCE-808D-411F-9A0C-BB92BA96C102"
+#define AMS_REMOTE_CMD_UUID       "9B3C81D8-57B1-4A8A-B8DF-0E56F7CA51C2"
+
 
 static volatile bool isConnected = false;
 
@@ -521,17 +523,30 @@ void ancsTask(void *pvParameters) {
                     NimBLERemoteService* pAMSService = pANCSClient->getService(NimBLEUUID(AMS_SERVICE_UUID));
                     if (pAMSService != nullptr) {
                         Serial.println("AMS Service found!");
+                        
+                        // 1. ĐĂNG KÝ QUYỀN ĐIỀU KHIỂN (Lừa iOS đây là tai nghe/smartwatch thật)
+                        NimBLERemoteCharacteristic* pRemoteCmdChar = pAMSService->getCharacteristic(NimBLEUUID(AMS_REMOTE_CMD_UUID));
+                        if (pRemoteCmdChar != nullptr && pRemoteCmdChar->canNotify()) {
+                            pRemoteCmdChar->subscribe(true, notifyCB);
+                            Serial.println("AMS Remote Command Subscribed!");
+                        }
+
+                        // Đợi iOS thở một nhịp sau khi đăng ký quyền 1
+                        vTaskDelay(pdMS_TO_TICKS(200));
+
+                        // 2. ĐĂNG KÝ QUYỀN ĐỌC TÊN BÀI HÁT
                         NimBLERemoteCharacteristic* pEntityUpdateChar = pAMSService->getCharacteristic(NimBLEUUID(AMS_ENTITY_UPDATE_UUID));
-                        if (pEntityUpdateChar != nullptr) {
-                            if (pEntityUpdateChar->canNotify()) {
-                                pEntityUpdateChar->subscribe(true, notifyCB);
-                                Serial.println("AMS Entity Update Subscribed!");
-                                
-                                // Command to track Track Entity (2), Artist Attr (0), Title Attr (2)
-                                uint8_t amsCmd[] = {2, 0, 2};
-                                pEntityUpdateChar->writeValue(amsCmd, sizeof(amsCmd), true);
-                                Serial.println("AMS Command written to Entity Update!");
-                            }
+                        if (pEntityUpdateChar != nullptr && pEntityUpdateChar->canNotify()) {
+                            pEntityUpdateChar->subscribe(true, notifyCB);
+                            Serial.println("AMS Entity Update Subscribed!");
+                            
+                            // Đợi iOS thở nhịp 2 trước khi đòi thông tin
+                            vTaskDelay(pdMS_TO_TICKS(500));
+                            
+                            // 3. GỬI LỆNH YÊU CẦU BÀI HÁT
+                            uint8_t amsCmd[] = {2, 0, 2}; // Entity: Track, Attr: Artist, Attr: Title
+                            pEntityUpdateChar->writeValue(amsCmd, sizeof(amsCmd), true);
+                            Serial.println("AMS Command written to Entity Update!");
                         }
                     } else {
                         Serial.println("AMS Service NOT found.");
